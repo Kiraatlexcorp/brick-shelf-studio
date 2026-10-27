@@ -1,5 +1,5 @@
 import type { Manifold, ManifoldToplevel } from "manifold-3d";
-import { DECK, UNIT, type CubeSpec, type Joint, type PartGroup } from "@/lib/brick/spec";
+import { DECK, UNIT, type CubeSpec, type BaseJoint, type Joint, type PartGroup } from "@/lib/brick/spec";
 
 type Vec3 = [number, number, number];
 export type JointPart = { kind: string; group: PartGroup; solid: Manifold; flat: Vec3; out: Vec3 };
@@ -102,8 +102,8 @@ function bowtie(m: ManifoldToplevel, t: number, grow: number, half: boolean): Ma
 }
 
 /** Which system joins this cube to the one above (stack) and beside it (side). */
-export const stackJoint = (s: CubeSpec): Joint => s.joint;
-export const sideJoint = (s: CubeSpec): Joint => s.joint;
+export const stackJoint = (s: CubeSpec): BaseJoint => (s.joint === "mixed" ? s.stack : s.joint);
+export const sideJoint = (s: CubeSpec): BaseJoint => (s.joint === "mixed" ? s.side : s.joint);
 
 export function buildJoints(m: ManifoldToplevel, spec: CubeSpec): JointGeometry {
   const { Manifold: M } = m;
@@ -118,7 +118,9 @@ export function buildJoints(m: ManifoldToplevel, spec: CubeSpec): JointGeometry 
 
   if (stack === "twist") {
     const sock = twistSocket(m, c);
-    const corners: [number, number][] = [[13, 13], [W - 13, 13], [13, D - 13], [W - 13, D - 13]];
+    // Back nodes move forward when rail staples sit at the back of the side walls (mixed mode).
+    const yb = side === "rail" ? D - 24 : D - 13;
+    const corners: [number, number][] = [[13, 13], [W - 13, 13], [13, yb], [W - 13, yb]];
     corners.forEach(([x, y], i) => {
       cuts.push(sock.translate([x, y, H]));
       cuts.push(sock.mirror([0, 0, 1]).translate([x, y, 0]));

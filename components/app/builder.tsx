@@ -8,7 +8,7 @@ import type { ManifoldToplevel } from "manifold-3d";
 import { Download, Expand, Minimize2, Moon, Printer, SlidersHorizontal, Sun } from "lucide-react";
 import { loadManifold } from "@/lib/geometry/manifold";
 import { buildCube, buildFitTile, previewParts, printParts } from "@/lib/brick/cube";
-import { A1_BED, CLEARANCES, DEFAULT_CUBE, UNIT, WALLS, normalize, type CubeSpec, type Hinge, type Joint, type Latch, type Side } from "@/lib/brick/spec";
+import { A1_BED, CLEARANCES, DEFAULT_CUBE, UNIT, WALLS, normalize, type BaseJoint, type CubeSpec, type Hinge, type Joint, type Latch, type Side } from "@/lib/brick/spec";
 import type { MeshPart } from "@/lib/brick/mesh";
 import { meshTo3mf } from "@/lib/export/threemf";
 import { meshToStl } from "@/lib/export/stl";
@@ -86,13 +86,16 @@ const JOINT_OPTIONS: { value: Joint; label: string }[] = [
   { value: "rail", label: "Rail" },
   { value: "clip", label: "Clip" },
   { value: "magnet", label: "Magnet" },
+  { value: "mixed", label: "Mix" },
 ];
+const BASE_OPTIONS = JOINT_OPTIONS.filter((o) => o.value !== "mixed") as { value: BaseJoint; label: string }[];
 const JOINT_HINT: Record<Joint, string> = {
   lego: "Studs on top, sockets underneath, dovetail rails between neighbours.",
   twist: "Acmie Lock: printed bayonet nodes with two lugs, at the corners for stacking and mid-wall side by side. Push in, turn 90° to lock. Walls go to 6 mm.",
   rail: "Double-T keys slide down T-slots from the top; a clip staple snaps over the slot and pins into both cubes.",
   magnet: "10 × 3 mm disc magnets glued into pockets, plus small stubs that line cubes up. Easy to rearrange, light loads only. Walls go to 6 mm.",
   clip: "Bowtie clips press into pockets across two cubes. Flat faces, no studs.",
+  mixed: "Mixed: pick one joint for stacking (top and bottom) and another for side by side (left and right). Walls follow the stricter of the two.",
 };
 
 const SIDES = ["front", "back", "left", "right"] as const;
@@ -164,6 +167,12 @@ function Controls({ spec, set, exploded, setExploded, open, setOpen, onFitTest, 
       ) : null}
       <SectionCard id="connection" title="Connection">
         <Choice<Joint> label="Joint" hint={JOINT_HINT[spec.joint]} value={spec.joint} options={JOINT_OPTIONS} onChange={(joint) => set({ joint })} />
+        {spec.joint === "mixed" ? (
+          <>
+            <Choice<BaseJoint> label="Stack (top / bottom)" hint={JOINT_HINT[spec.stack]} value={spec.stack} options={BASE_OPTIONS} onChange={(stack) => set({ stack })} />
+            <Choice<BaseJoint> label="Side (left / right)" hint={JOINT_HINT[spec.side]} value={spec.side} options={BASE_OPTIONS} onChange={(side) => set({ side })} />
+          </>
+        ) : null}
         {spec.back === "wall" ? (
           <SwitchField id="wallmount" label="Wall mode" hint="Floating cube: print the wall rail, screw it to the wall, bolt the hook to the back wall with two M4 bolts, then drop the cube on. Turns bolt holes on." checked={spec.wallMount} onChange={(wallMount) => set({ wallMount })} />
         ) : null}
@@ -171,7 +180,7 @@ function Controls({ spec, set, exploded, setExploded, open, setOpen, onFitTest, 
       <SectionCard id="strength" title="Strength">
         <Choice label="Wall" hint="Panel thickness. 5 mm with ribs and gussets is the 10 kg default; 6 mm or more if you use drawers and dovetails." value={String(spec.wall)}
           options={WALLS.map((w) => ({ value: String(w), label: `${w} mm` }))} onChange={(v) => set({ wall: Number(v) })} />
-        {spec.joint === "lego" ? <SwitchField id="dovetail" label="Dovetail joins" hint="Rails on the right wall slide down into grooves on the next cube's left wall." checked={spec.dovetail} onChange={(dovetail) => set({ dovetail })} /> : null}
+        {(spec.joint === "mixed" ? spec.side : spec.joint) === "lego" ? <SwitchField id="dovetail" label="Dovetail joins" hint="Rails on the right wall slide down into grooves on the next cube's left wall." checked={spec.dovetail} onChange={(dovetail) => set({ dovetail })} /> : null}
         <SwitchField id="bolts" label="M4 bolt holes" hint="Corner holes through the decks to bolt stacked cubes, side holes to bolt neighbours, two back holes to screw to a wall." checked={spec.bolts} onChange={(bolts) => set({ bolts })} />
         <SwitchField id="gussets" label="Corner gussets" hint="Triangles in the back corners stop the cube racking." checked={spec.gussets} onChange={(gussets) => set({ gussets })} />
         <SwitchField id="ribs" label="Deck ribs" hint="Ribs under the top deck cut sag under load." checked={spec.ribs} onChange={(ribs) => set({ ribs })} />

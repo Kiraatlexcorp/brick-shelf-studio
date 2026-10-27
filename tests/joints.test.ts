@@ -20,8 +20,8 @@ const check = (joint: Joint, extra: Partial<CubeSpec> = {}) => {
 };
 
 /** Loose joint parts locked into a neighbour (above or to the right) must sit in its pockets, not its walls. */
-const neighbour = (joint: Joint, offset: [number, number, number]) => {
-  const { spec, parts } = check(joint);
+const neighbour = (joint: Joint, offset: [number, number, number], extra: Partial<CubeSpec> = {}) => {
+  const { spec, parts } = check(joint, extra);
   const other = buildCube(m, spec).filter((p) => p.group !== "joint").map((p) => p.solid.translate(offset));
   const loose = parts.filter((p) => p.group === "joint");
   expect(loose.length).toBeGreaterThan(0);
@@ -91,6 +91,19 @@ describe("joints", () => {
     const top = parts.find((p) => p.kind === "top")!.solid;
     expect(top.genus()).toBeGreaterThanOrEqual(0);
     expect(top.boundingBox().max[2]).toBeCloseTo(2 * UNIT + 1.5, 1);
+  });
+
+  it("mixed mode: each face pair gets its own joint", () => {
+    for (const [stack, side] of [["twist", "rail"], ["magnet", "clip"], ["lego", "twist"], ["rail", "magnet"], ["clip", "lego"]] as const) {
+      const spec = normalize({ ...DEFAULT_CUBE, joint: "mixed", stack, side });
+      neighbour("mixed", [0, 0, 2 * UNIT], spec);
+      neighbour("mixed", [2 * UNIT, 0, 0], spec);
+      const top = buildCube(m, spec).find((p) => p.kind === "top")!.solid.boundingBox().max[2];
+      if (stack === "lego") expect(top).toBeGreaterThan(2 * UNIT + 1);
+      else if (stack !== "magnet") expect(top).toBeCloseTo(2 * UNIT, 3);
+      expect(spec.dovetail).toBe(side === "lego");
+    }
+    fits("mixed");
   });
 
   it("wall mode: hook bolts to the back, bevel drops behind the rail, cube floats", () => {
