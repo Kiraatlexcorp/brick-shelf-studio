@@ -24,7 +24,7 @@ const neighbour = (joint: Joint, offset: [number, number, number], extra: Partia
   const { spec, parts } = check(joint, extra);
   const other = buildCube(m, spec).filter((p) => p.group !== "joint").map((p) => p.solid.translate(offset));
   const loose = parts.filter((p) => p.group === "joint");
-  expect(loose.length).toBeGreaterThan(0);
+  if (joint !== "mixed") expect(loose.length).toBeGreaterThan(0); // e.g. lego+magnet mixed has no loose parts
   for (const l of loose) for (const o of other) expect(vol(l.solid, o), l.kind).toBeLessThan(0.05);
 };
 
@@ -93,8 +93,11 @@ describe("joints", () => {
     expect(top.boundingBox().max[2]).toBeCloseTo(2 * UNIT + 1.5, 1);
   });
 
-  it("mixed mode: each face pair gets its own joint", () => {
-    for (const [stack, side] of [["twist", "rail"], ["magnet", "clip"], ["lego", "twist"], ["rail", "magnet"], ["clip", "lego"]] as const) {
+  it("mixed mode: all 20 stack/side pairs build clean and lock to neighbours", () => {
+    const base = ["lego", "twist", "rail", "clip", "magnet"] as const;
+    const pairs = base.flatMap((a) => base.filter((b) => b !== a).map((b) => [a, b] as const));
+    expect(pairs).toHaveLength(20);
+    for (const [stack, side] of pairs) {
       const spec = normalize({ ...DEFAULT_CUBE, joint: "mixed", stack, side });
       neighbour("mixed", [0, 0, 2 * UNIT], spec);
       neighbour("mixed", [2 * UNIT, 0, 0], spec);
