@@ -65,12 +65,12 @@ export function twistSocket(m: ManifoldToplevel, c: number): Manifold {
 }
 
 /** T-slot profile in x (0 at the face, +x into the wall) and y, extruded z0..z1. */
-function tSlot(m: ManifoldToplevel, z0: number, z1: number, c: number): Manifold {
+function tSlot(m: ManifoldToplevel, z0: number, z1: number, c: number, dimpleAt = z0 + 6): Manifold {
   const { Manifold: M } = m;
   const { neckW, neckD, headW, headD, bump } = RAIL;
   const neck = M.cube([neckD + 0.02, neckW + 2 * c, z1 - z0]).translate([-0.01, -(neckW + 2 * c) / 2, z0]);
   const head = M.cube([headD + c, headW + 2 * c, z1 - z0]).translate([neckD, -(headW + 2 * c) / 2, z0]);
-  const dimple = M.sphere(bump + c, 20).translate([neckD + headD + c, 0, z0 + 6]);
+  const dimple = M.sphere(bump + c, 20).translate([neckD + headD + c, 0, dimpleAt]);
   return M.union([neck, head, dimple]);
 }
 
@@ -170,16 +170,28 @@ export function buildJoints(m: ManifoldToplevel, spec: CubeSpec): JointGeometry 
     const xs = Array.from({ length: spec.w }, (_, i) => i * UNIT + UNIT / 2);
     for (const x of xs) {
       // slot depth -> z, width -> x, run -> +y (open at the front, closed 1 mm short of the back)
-      const topSlot = tSlot(m, -0.01, D - 1, c).rotate([0, -90, 0]).rotate([0, 0, -90]);
+      const topSlot = tSlot(m, -0.01, D - 1, c, RAIL_CLIP.barT + c + 6).rotate([0, -90, 0]).rotate([0, 0, -90]);
       cuts.push(topSlot.mirror([0, 0, 1]).translate([x, 0, H]));
       cuts.push(topSlot.translate([x, 0, 0]));
     }
-    xs.forEach((x, i) =>
+    // Front clip: a flat bar recessed into the front faces across the deck seam, two pins into each deck,
+    // so the key can't slide back out the front. Pins sit beside the slot, not in it.
+    const { pinR, barT } = RAIL_CLIP;
+    const bw = 15, bh = 5, px = 5.5;
+    for (const x of xs) {
+      for (const z0 of [H - bh - c, -0.01]) cuts.push(M.cube([bw + 2 * c, barT + 0.01, bh + c + 0.01]).translate([x - bw / 2 - c, -0.01, z0]));
+      for (const dx of [-px, px]) for (const z of [H - 3, 3])
+        cuts.push(M.cylinder(4.5, pinR + c, pinR + c, 20).rotate([-90, 0, 0]).translate([x + dx, barT - 0.01, z]));
+    }
+    xs.forEach((x, i) => {
       parts.push({
         kind: `deck-key-${i + 1}`, group: "joint", flat: [0, 0, 0], out: [0, 0, 1],
-        solid: railKey(m, c, D - 1 - c, c).rotate([0, -90, 0]).rotate([0, 0, -90]).translate([x, 0, H]),
-      }),
-    );
+        solid: railKey(m, barT + c, D - 1 - c, c).rotate([0, -90, 0]).rotate([0, 0, -90]).translate([x, 0, H]),
+      });
+      const bar = M.cube([bw, barT - c, 2 * bh - 2 * c]).translate([x - bw / 2, 0.005, H - bh + c]);
+      const pins = [-px, px].flatMap((dx) => [H - 3, H + 3].map((z) => M.cylinder(4, pinR, pinR, 20).rotate([-90, 0, 0]).translate([x + dx, barT - c - 0.01, z])));
+      parts.push({ kind: `deck-clip-${i + 1}`, group: "joint", solid: M.union([bar, ...pins]), flat: [90, 0, 0], out: [0, -1, 0] });
+    });
   }
 
   const t = CLIP.depth;

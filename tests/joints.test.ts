@@ -159,6 +159,12 @@ describe("joints", () => {
     }
   });
 
+  it("deck rail keys get a front clip that pins into both decks", () => {
+    const { parts } = check("mixed", { stack: "rail", side: "lego" });
+    expect(parts.filter((p) => p.kind.startsWith("deck-clip-"))).toHaveLength(2);
+    neighbour("mixed", [0, 0, 2 * UNIT], { stack: "rail", side: "lego" });
+  });
+
   it("wall mode: hook bolts to the back, bevel drops behind the rail, cube floats", () => {
     for (const h of [1, 2, 4]) {
       const { parts } = check("lego", { wallMount: true, h });
