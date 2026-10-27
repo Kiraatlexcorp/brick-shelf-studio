@@ -705,9 +705,14 @@ export function Builder() {
                 }
               }}
               onMoveCube={(id, dx, dz) => {
-                setLayout((l) => moveCube(l, id, dx, dz));
+                const res = moveCube(layout, id, dx, dz);
+                if (res.error) {
+                  show(res.error);
+                  return;
+                }
+                setLayout(res.layout);
                 setSelectedId(id);
-                const target = layout.cubes.find((c) => c.id === id);
+                const target = res.layout.cubes.find((c) => c.id === id);
                 if (target) setSpec(target.spec);
               }}
               onRemoveCube={(id) => {

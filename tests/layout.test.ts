@@ -71,8 +71,8 @@ describe("layout - pure helpers", () => {
 
     // Moving down from z=0 is refused
     const moved = moveCube(layout, "c1", 0, -1);
-    expect(moved.cubes[0].z).toBe(0);
-    expect(moved).toBe(layout);
+    expect(moved.layout.cubes[0].z).toBe(0);
+    expect(moved.error).toBe("Already on the floor");
   });
 
   it("moveCube refuses overlaps", () => {
@@ -80,10 +80,11 @@ describe("layout - pure helpers", () => {
     layout = addCube(layout, spec, { x: 0, z: 0, id: "c1" });
     layout = addCube(layout, spec, { x: 1, z: 0, id: "c2" });
 
-    // Try moving c2 into c1's cell (dx = -1, dz = 0)
+    // Moving c2 into c1's cell (dx = -1, dz = 0) swaps the two cubes
     const moved = moveCube(layout, "c2", -1, 0);
-    expect(moved).toBe(layout);
-    expect(moved.cubes.find((c) => c.id === "c2")?.x).toBe(1);
+    expect(moved.error).toBeUndefined();
+    expect(moved.layout.cubes.find((c) => c.id === "c2")?.x).toBe(0);
+    expect(moved.layout.cubes.find((c) => c.id === "c1")?.x).toBe(1);
   });
 
   it("moveCube refuses floating moves (z > 0 needs cube under it at same x, z - 1)", () => {
@@ -91,19 +92,22 @@ describe("layout - pure helpers", () => {
     layout = addCube(layout, spec, { x: 0, z: 0, id: "c1" });
     layout = addCube(layout, spec, { x: 1, z: 0, id: "c2" });
 
-    // Moving c2 up to (1, 1) without a cube under it floats -> refused
-    const float1 = moveCube(layout, "c2", 0, 1);
-    expect(float1).toBe(layout);
+    // Moving c2 up stacks it on c1 at (0, 1)
+    const stacked = moveCube(layout, "c2", 0, 1);
+    expect(stacked.error).toBeUndefined();
+    expect(stacked.layout.cubes.find((c) => c.id === "c2")?.x).toBe(0);
+    expect(stacked.layout.cubes.find((c) => c.id === "c2")?.z).toBe(1);
 
-    // Moving c2 on top of c1 at (0, 1) succeeds
-    const stacked = moveCube(layout, "c2", -1, 1);
-    expect(stacked.cubes.find((c) => c.id === "c2")?.x).toBe(0);
-    expect(stacked.cubes.find((c) => c.id === "c2")?.z).toBe(1);
+    // Moving c2 right into empty air without support is refused
+    const float1 = moveCube(stacked.layout, "c2", 1, 0);
+    expect(float1.error).toBe("Nothing to stand on there");
+    expect(float1.layout).toBe(stacked.layout);
 
-    // Now with c2 at (0, 1) on top of c1 at (0, 0):
-    // Moving base cube c1 away would leave c2 floating -> refused!
-    const moveBase = moveCube(stacked, "c1", 1, 0);
-    expect(moveBase).toBe(stacked);
+    // Moving base cube c1 away applies gravity so c2 falls down to floor rather than floating
+    const moveBase = moveCube(stacked.layout, "c1", 1, 0);
+    expect(moveBase.error).toBeUndefined();
+    expect(moveBase.layout.cubes.find((c) => c.id === "c1")?.x).toBe(1);
+    expect(moveBase.layout.cubes.find((c) => c.id === "c2")?.z).toBe(0);
   });
 
   it("removeCube removes the target cube", () => {
