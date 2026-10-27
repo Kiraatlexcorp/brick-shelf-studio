@@ -82,6 +82,7 @@ function Choice<T extends string>({ label, hint, value, options, onChange }: {
 
 const JOINT_OPTIONS: { value: Joint; label: string }[] = [
   { value: "lego", label: "Lego" },
+  { value: "twist", label: "Acmie Lock" },
 ];
 const JOINT_HINT: Record<Joint, string> = {
   lego: "Studs on top, sockets underneath, dovetail rails between neighbours.",

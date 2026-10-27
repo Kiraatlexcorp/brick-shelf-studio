@@ -4,6 +4,7 @@ import {
   SOCKET_EXTRA, STUD_H, STUD_R, TAB_LEN, UNIT,
   normalize, type CubeSpec, type PartGroup, type SideKey,
 } from "@/lib/brick/spec";
+import { buildJoints } from "@/lib/brick/joints";
 import { toPart, type MeshPart } from "@/lib/brick/mesh";
 
 type Vec3 = [number, number, number];
@@ -244,11 +245,18 @@ export function buildCube(m: ManifoldToplevel, input: CubeSpec): Panel[] {
   if (allBottom.length) bottom = bottom.subtract(M.union(allBottom));
   if (allTop.length) top = top.subtract(M.union(allTop));
 
+  const joints = buildJoints(m, spec);
+  if (joints.cuts.length) {
+    const jc = M.union(joints.cuts);
+    bottom = bottom.subtract(jc);
+    top = top.subtract(jc);
+    for (const p of panels) p.solid = p.solid.subtract(jc);
+  }
   panels.unshift(
     { kind: "top", group: "deck", solid: top, flat: [0, 0, 0], out: [0, 0, 1] },
     { kind: "bottom", group: "deck", solid: bottom, flat: [0, 0, 0], out: [0, 0, -1] },
   );
-  return [...panels, ...fixtures];
+  return [...panels, ...fixtures, ...joints.parts];
 }
 
 /**
