@@ -5,6 +5,7 @@ import {
   normalize, type CubeSpec, type PartGroup, type SideKey,
 } from "@/lib/brick/spec";
 import { buildJoints, stackJoint } from "@/lib/brick/joints";
+import { buildWallMount } from "@/lib/brick/wall";
 import { toPart, type MeshPart } from "@/lib/brick/mesh";
 
 type Vec3 = [number, number, number];
@@ -261,7 +262,8 @@ export function buildCube(m: ManifoldToplevel, input: CubeSpec): Panel[] {
     { kind: "top", group: "deck", solid: top, flat: [0, 0, 0], out: [0, 0, 1] },
     { kind: "bottom", group: "deck", solid: bottom, flat: [0, 0, 0], out: [0, 0, -1] },
   );
-  return [...panels, ...fixtures, ...joints.parts];
+  const wallParts = spec.wallMount ? buildWallMount(m, spec) : [];
+  return [...panels, ...fixtures, ...joints.parts, ...wallParts];
 }
 
 /**

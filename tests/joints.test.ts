@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import Module from "manifold-3d";
 import { buildCube, printParts } from "@/lib/brick/cube";
 import { boundsOf } from "@/lib/export/threemf";
-import { A1_BED, DEFAULT_CUBE, UNIT, type CubeSpec, type Joint } from "@/lib/brick/spec";
+import { A1_BED, DEFAULT_CUBE, normalize, UNIT, type CubeSpec, type Joint } from "@/lib/brick/spec";
 
 const m = await Module();
 m.setup();
@@ -91,6 +91,20 @@ describe("joints", () => {
     const top = parts.find((p) => p.kind === "top")!.solid;
     expect(top.genus()).toBeGreaterThanOrEqual(0);
     expect(top.boundingBox().max[2]).toBeCloseTo(2 * UNIT + 1.5, 1);
+  });
+
+  it("wall mode: hook bolts to the back, bevel drops behind the rail, cube floats", () => {
+    for (const h of [1, 2, 4]) {
+      const { parts } = check("lego", { wallMount: true, h });
+      const hook = parts.find((p) => p.kind === "wall-hook")!.solid.boundingBox();
+      const rail = parts.find((p) => p.kind === "wall-rail")!.solid.boundingBox();
+      expect(hook.min[1]).toBeCloseTo(2 * UNIT, 3); // flush on the back wall
+      expect(rail.max[1]).toBeCloseTo(2 * UNIT + 16, 3); // rail against the wall
+      expect(hook.max[2]).toBeGreaterThan(rail.max[2]); // hook sits over the rail
+      expect(rail.max[0] - rail.min[0]).toBeLessThanOrEqual(A1_BED);
+    }
+    // no back wall, no wall mode
+    expect(buildCube(m, normalize({ ...DEFAULT_CUBE, back: "open", wallMount: true })).some((p) => p.kind === "wall-rail")).toBe(false);
   });
 
   it("every joint fits the bed at 4x4x4", () => {

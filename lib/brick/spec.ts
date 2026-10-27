@@ -71,6 +71,8 @@ export type CubeSpec = {
   panels: number;
   /** Cube-to-cube connection system. */
   joint: Joint;
+  /** Wall mode: printed wall rail plus a hook on the back, so the cube floats. */
+  wallMount: boolean;
 };
 
 export const DEFAULT_CUBE: CubeSpec = {
@@ -93,6 +95,7 @@ export const DEFAULT_CUBE: CubeSpec = {
   dividers: 0,
   panels: 2,
   joint: "lego",
+  wallMount: false,
 };
 
 export const CLEARANCES = [0.1, 0.2, 0.3] as const;
@@ -116,6 +119,9 @@ export function normalize(spec: CubeSpec): CubeSpec {
   s.dividers = Math.max(0, Math.min(3, Math.round(s.dividers)));
   s.panels = s.panels === 1 ? 1 : 2;
   if (!JOINTS.includes(s.joint)) s.joint = "lego";
+  // The hook bolts through the back wall's M4 holes.
+  s.wallMount = !!s.wallMount && s.back === "wall";
+  if (s.wallMount) s.bolts = true;
   // Studs and dovetails belong to the Lego joint; the others replace them.
   if (s.joint !== "lego") s.dovetail = false;
   // T-slots on the outer face need room next to the drawer grooves.
