@@ -14,6 +14,7 @@ const COLOR: Record<string, string> = {
   door: "#3aa35b",
   drawer: "#f4f1ea",
   slide: "#7ab8e8",
+  joint: "#3a3a3a",
 };
 
 function Part({ part, explode }: { part: MeshPart; explode: number }) {

@@ -8,7 +8,7 @@ import type { ManifoldToplevel } from "manifold-3d";
 import { Download, Expand, Minimize2, Moon, Printer, SlidersHorizontal, Sun } from "lucide-react";
 import { loadManifold } from "@/lib/geometry/manifold";
 import { buildCube, buildFitTile, previewParts, printParts } from "@/lib/brick/cube";
-import { A1_BED, CLEARANCES, DEFAULT_CUBE, UNIT, WALLS, normalize, type CubeSpec, type Hinge, type Latch, type Side } from "@/lib/brick/spec";
+import { A1_BED, CLEARANCES, DEFAULT_CUBE, UNIT, WALLS, normalize, type CubeSpec, type Hinge, type Joint, type Latch, type Side } from "@/lib/brick/spec";
 import type { MeshPart } from "@/lib/brick/mesh";
 import { meshTo3mf } from "@/lib/export/threemf";
 import { meshToStl } from "@/lib/export/stl";
@@ -80,6 +80,16 @@ function Choice<T extends string>({ label, hint, value, options, onChange }: {
   );
 }
 
+const JOINT_OPTIONS: { value: Joint; label: string }[] = [
+  { value: "lego", label: "Lego" },
+];
+const JOINT_HINT: Record<Joint, string> = {
+  lego: "Studs on top, sockets underneath, dovetail rails between neighbours.",
+  twist: "Acmie Lock: printed corner nodes with two bayonet lugs. Push in, turn 90° to lock.",
+  rail: "Double-T keys slide down T-slots on both sides; a bump clicks into a dimple at the bottom.",
+  clip: "Bowtie clips press into pockets across two cubes. Flat faces, no studs.",
+};
+
 const SIDES = ["front", "back", "left", "right"] as const;
 const SIDE_OPTIONS: { value: Side; label: string }[] = [
   { value: "wall", label: "Wall" },
@@ -147,10 +157,13 @@ function Controls({ spec, set, exploded, setExploded, open, setOpen, onFitTest, 
           <SwitchField id="open" label="Show open" hint="Swing doors open and pull drawers out in the preview." checked={open} onChange={setOpen} />
         </SectionCard>
       ) : null}
+      <SectionCard id="connection" title="Connection">
+        <Choice<Joint> label="Joint" hint={JOINT_HINT[spec.joint]} value={spec.joint} options={JOINT_OPTIONS} onChange={(joint) => set({ joint })} />
+      </SectionCard>
       <SectionCard id="strength" title="Strength">
         <Choice label="Wall" hint="Panel thickness. 5 mm with ribs and gussets is the 10 kg default; 6 mm or more if you use drawers and dovetails." value={String(spec.wall)}
           options={WALLS.map((w) => ({ value: String(w), label: `${w} mm` }))} onChange={(v) => set({ wall: Number(v) })} />
-        <SwitchField id="dovetail" label="Dovetail joins" hint="Rails on the right wall slide down into grooves on the next cube's left wall." checked={spec.dovetail} onChange={(dovetail) => set({ dovetail })} />
+        {spec.joint === "lego" ? <SwitchField id="dovetail" label="Dovetail joins" hint="Rails on the right wall slide down into grooves on the next cube's left wall." checked={spec.dovetail} onChange={(dovetail) => set({ dovetail })} /> : null}
         <SwitchField id="bolts" label="M4 bolt holes" hint="Corner holes through the decks to bolt stacked cubes, side holes to bolt neighbours, two back holes to screw to a wall." checked={spec.bolts} onChange={(bolts) => set({ bolts })} />
         <SwitchField id="gussets" label="Corner gussets" hint="Triangles in the back corners stop the cube racking." checked={spec.gussets} onChange={(gussets) => set({ gussets })} />
         <SwitchField id="ribs" label="Deck ribs" hint="Ribs under the top deck cut sag under load." checked={spec.ribs} onChange={(ribs) => set({ ribs })} />

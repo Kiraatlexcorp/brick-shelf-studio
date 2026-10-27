@@ -32,6 +32,10 @@ export const MAGNET = { r: 2.1, depth: 2.2 };
 /** Drawer rail groove in the side walls. */
 export const GROOVE = { depth: 1.8, height: 6, lip: 0.8, lipLen: 3 };
 
+/** How cubes join each other: stacking (top/bottom) and side by side. */
+export type Joint = "lego" | "twist" | "rail" | "clip";
+export const JOINTS: Joint[] = ["lego", "twist", "rail", "clip"];
+
 export type Side = "wall" | "open" | "door" | "drawer" | "slide";
 export type Hinge = "left" | "right" | "top" | "bottom";
 export type Latch = "magnet" | "bump";
@@ -65,6 +69,8 @@ export type CubeSpec = {
   dividers: number;
   /** Sliding door panels: 1 or 2. */
   panels: number;
+  /** Cube-to-cube connection system. */
+  joint: Joint;
 };
 
 export const DEFAULT_CUBE: CubeSpec = {
@@ -86,6 +92,7 @@ export const DEFAULT_CUBE: CubeSpec = {
   drawers: 1,
   dividers: 0,
   panels: 2,
+  joint: "lego",
 };
 
 export const CLEARANCES = [0.1, 0.2, 0.3] as const;
@@ -94,7 +101,7 @@ export type SideKey = "front" | "back" | "left" | "right";
 export const SIDE_KEYS: SideKey[] = ["front", "back", "left", "right"];
 export type PanelKind = "bottom" | "top" | SideKey;
 /** Colour group in the preview. */
-export type PartGroup = "deck" | "side" | "back" | "front" | "door" | "drawer" | "slide";
+export type PartGroup = "deck" | "side" | "back" | "front" | "door" | "drawer" | "slide" | "joint";
 
 /** Make a spec consistent: drawers only at the front, side walls kept for drawer rails. */
 export function normalize(spec: CubeSpec): CubeSpec {
@@ -108,5 +115,10 @@ export function normalize(spec: CubeSpec): CubeSpec {
   s.drawers = Math.max(1, Math.min(2, Math.round(s.drawers)));
   s.dividers = Math.max(0, Math.min(3, Math.round(s.dividers)));
   s.panels = s.panels === 1 ? 1 : 2;
+  if (!JOINTS.includes(s.joint)) s.joint = "lego";
+  // Studs and dovetails belong to the Lego joint; the others replace them.
+  if (s.joint !== "lego") s.dovetail = false;
+  // T-slots on the outer face need room next to the drawer grooves.
+  if (s.joint === "rail" && s.wall < 5) s.wall = 5;
   return s;
 }

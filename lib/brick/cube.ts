@@ -169,13 +169,14 @@ export function buildCube(m: ManifoldToplevel, input: CubeSpec): Panel[] {
   let bottom = box(0, 0, 0, W, D, DECK);
   const sockets: Manifold[] = [];
   const studs: Manifold[] = [];
-  for (const x of tabCentres(spec.w))
+  if (spec.joint === "lego") for (const x of tabCentres(spec.w))
     for (const y of tabCentres(spec.d)) {
       sockets.push(M.cylinder(STUD_H + SOCKET_EXTRA, STUD_R + SOCKET_EXTRA, STUD_R + SOCKET_EXTRA, SEG).translate([x, y, -0.01]));
       studs.push(M.cylinder(STUD_H, STUD_R, STUD_R, SEG).translate([x, y, H - 0.01]));
     }
-  bottom = bottom.subtract(M.union(sockets));
-  let top = box(0, 0, H - DECK, W, D, DECK).add(M.union(studs));
+  if (sockets.length) bottom = bottom.subtract(M.union(sockets));
+  let top = box(0, 0, H - DECK, W, D, DECK);
+  if (studs.length) top = top.add(M.union(studs));
   if (ribs) {
     const xs = spec.w === 1 ? [W / 2] : Array.from({ length: spec.w - 1 }, (_, i) => (i + 1) * UNIT);
     // Ribs run front to back under the top deck so drawers still slide under them.
