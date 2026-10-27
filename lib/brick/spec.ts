@@ -1,11 +1,11 @@
 /** Every size is in grid units of UNIT mm, Lego look at 5x scale. */
 export const UNIT = 40;
 /** Side, back and front panel thickness. */
-export const WALL = 4;
+export const WALL = 8;
 /** Top and bottom panel thickness; thick enough for slots plus stud sockets. */
 export const DECK = 6;
-/** Edge tabs: width along the edge and how far they reach into the deck. */
-export const TAB_W = 10;
+/** Edge studs: round Lego-style pegs on wall edges that press into deck sockets. */
+export const PEG_R = 3;
 export const TAB_LEN = 3;
 /** Slot depth is the tab length plus this air gap. */
 export const SLOT_EXTRA = 0.4;

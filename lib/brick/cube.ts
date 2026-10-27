@@ -1,6 +1,6 @@
 import type { Manifold, ManifoldToplevel } from "manifold-3d";
 import {
-  CLEARANCES, DECK, SLOT_EXTRA, SOCKET_EXTRA, STUD_H, STUD_R, TAB_LEN, TAB_W, UNIT, WALL,
+  CLEARANCES, DECK, PEG_R, SLOT_EXTRA, SOCKET_EXTRA, STUD_H, STUD_R, TAB_LEN, UNIT, WALL,
   type CubeSpec, type PanelKind,
 } from "@/lib/brick/spec";
 import { toPart, type MeshPart } from "@/lib/brick/mesh";
@@ -34,13 +34,34 @@ export function buildCube(m: ManifoldToplevel, spec: CubeSpec): Panel[] {
   if (spec.back === "wall") walls.push({ kind: "back", x: WALL, y: D - WALL, sx: W - 2 * WALL, sy: WALL, alongX: true });
   if (spec.front === "wall") walls.push({ kind: "front", x: WALL, y: 0, sx: W - 2 * WALL, sy: WALL, alongX: true });
 
-  // Tabs as footprints (x, y, sx, sy), centred per unit and clamped inside the wall.
-  const tabsOf = (wall: WallDef) =>
+  // Edge stud centres (x, y) along each wall, one per grid unit.
+  const pegsOf = (wall: WallDef) =>
     wall.alongX
       ? tabCentres(spec.w, 0)
-          .filter((cx) => cx - TAB_W / 2 >= wall.x && cx + TAB_W / 2 <= wall.x + wall.sx)
-          .map((cx) => ({ x: cx - TAB_W / 2, y: wall.y, sx: TAB_W, sy: WALL }))
-      : tabCentres(spec.d, 0).map((cy) => ({ x: wall.x, y: cy - TAB_W / 2, sx: WALL, sy: TAB_W }));
+          .filter((cx) => cx - PEG_R >= wall.x && cx + PEG_R <= wall.x + wall.sx)
+          .map((cx) => ({ x: cx, y: wall.y + WALL / 2 }))
+      : tabCentres(spec.d, 0).map((cy) => ({ x: wall.x + WALL / 2, y: cy }));
+
+  // Face studs and sockets: studs on the right and back faces, sockets on the
+  // left and front, so a neighbour cube snaps on at the side like Lego.
+  const faceGrid = (wall: WallDef) => {
+    const along = wall.alongX ? spec.w : spec.d;
+    const pts: { u: number; z: number }[] = [];
+    for (let i = 0; i < along; i++)
+      for (let k = 0; k < spec.h; k++) pts.push({ u: i * UNIT + UNIT / 2, z: k * UNIT + UNIT / 2 });
+    return pts;
+  };
+  const faceStud = (wall: WallDef, u: number, z: number, socket: boolean) => {
+    const r = socket ? STUD_R + SOCKET_EXTRA : STUD_R;
+    const h = socket ? STUD_H + SOCKET_EXTRA : STUD_H;
+    const cyl = M.cylinder(socket ? h + 1 : h, r, r, SEG);
+    switch (wall.kind) {
+      case "right": return cyl.rotate([0, 90, 0]).translate([W, u, z]);
+      case "left": return cyl.rotate([0, -90, 0]).translate([h, u, z]);
+      case "back": return cyl.rotate([-90, 0, 0]).translate([u, D, z]);
+      default: return cyl.rotate([90, 0, 0]).translate([u, h, z]);
+    }
+  };
 
   const panels: Panel[] = [];
 
@@ -67,15 +88,21 @@ export function buildCube(m: ManifoldToplevel, spec: CubeSpec): Panel[] {
   const slotsTop: Manifold[] = [];
   for (const wall of walls) {
     let solid = box(wall.x, wall.y, DECK, wall.sx, wall.sy, wallH);
-    const tabs = tabsOf(wall);
-    for (const t of tabs) {
-      solid = solid
-        .add(box(t.x, t.y, DECK - TAB_LEN, t.sx, t.sy, TAB_LEN))
-        .add(box(t.x, t.y, H - DECK, t.sx, t.sy, TAB_LEN));
-      slotsBottom.push(box(t.x - c, t.y - c, DECK - slotDepth, t.sx + 2 * c, t.sy + 2 * c, slotDepth + 1));
-      slotsTop.push(box(t.x - c, t.y - c, H - DECK - 1, t.sx + 2 * c, t.sy + 2 * c, slotDepth + 1));
+    for (const p of pegsOf(wall)) {
+      const peg = M.cylinder(TAB_LEN, PEG_R, PEG_R, 32);
+      solid = solid.add(peg.translate([p.x, p.y, DECK - TAB_LEN])).add(peg.translate([p.x, p.y, H - DECK]));
+      const hole = M.cylinder(slotDepth + 1, PEG_R + c, PEG_R + c, 32);
+      slotsBottom.push(hole.translate([p.x, p.y, DECK - slotDepth]));
+      slotsTop.push(hole.translate([p.x, p.y, H - DECK - 1]));
     }
-    const flat: [number, number, number] = wall.alongX ? [90, 0, 0] : [0, 90, 0];
+    const socketFace = wall.kind === "left" || wall.kind === "front";
+    const face = faceGrid(wall)
+      .filter(({ z }) => z - STUD_R >= DECK && z + STUD_R <= H - DECK)
+      .map(({ u, z }) => faceStud(wall, u, z, socketFace));
+    if (face.length) solid = socketFace ? solid.subtract(M.union(face)) : solid.add(M.union(face));
+    // Lay flat with studs facing up (sockets face the bed).
+    const flat: [number, number, number] =
+      wall.kind === "right" ? [0, -90, 0] : wall.kind === "left" ? [0, 90, 0] : wall.kind === "back" ? [90, 0, 0] : [-90, 0, 0];
     panels.push({ kind: wall.kind, solid, flat });
   }
   if (slotsBottom.length) bottom = bottom.subtract(M.union(slotsBottom));
@@ -97,7 +124,7 @@ export function printParts(panels: Panel[]): MeshPart[] {
 
 /**
  * Fit tile: a deck strip with three slots (0.1, 0.2, 0.3 mm gap per side) and a
- * wall strip with one tab. Press the tab into each slot, keep the snuggest one
+ * wall strip with one edge stud. Press the stud into each slot, keep the snuggest one
  * that still goes in by hand. Dots next to each slot count 1, 2, 3.
  */
 export function buildFitTile(m: ManifoldToplevel): MeshPart[] {
@@ -108,11 +135,11 @@ export function buildFitTile(m: ManifoldToplevel): MeshPart[] {
   const cuts: Manifold[] = [];
   CLEARANCES.forEach((c, i) => {
     const cx = 6 + i * pitch + 5;
-    cuts.push(M.cube([TAB_W + 2 * c, WALL + 2 * c, TAB_LEN + SLOT_EXTRA + 1]).translate([cx - TAB_W / 2 - c, 8 - c, DECK - TAB_LEN - SLOT_EXTRA]));
+    cuts.push(M.cylinder(TAB_LEN + SLOT_EXTRA + 1, PEG_R + c, PEG_R + c, 32).translate([cx, 12, DECK - TAB_LEN - SLOT_EXTRA]));
     for (let k = 0; k <= i; k++) cuts.push(M.cylinder(1, 1, 1, 16).translate([cx - 4 + k * 4, 3, DECK - 0.6]));
   });
   deck = deck.subtract(M.union(cuts));
   // Key: a short wall with one tab on its edge, printed flat.
-  const key = M.cube([30, 14, WALL]).add(M.cube([TAB_W, TAB_LEN, WALL]).translate([10, 14, 0]));
+  const key = M.cube([30, 14, WALL]).add(M.cylinder(TAB_LEN, PEG_R, PEG_R, 32).rotate([-90, 0, 0]).translate([15, 14, WALL / 2]));
   return [toPart("fit-deck", deck), toPart("fit-key", key)];
 }
