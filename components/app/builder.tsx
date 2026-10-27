@@ -181,6 +181,7 @@ function Controls({ spec, set, exploded, setExploded, open, setOpen, onFitTest, 
               <Choice label="Drawers" hint="One full height drawer or two half height drawers (needs 2u tall)." value={String(spec.drawers)}
                 options={[{ value: "1", label: "1 full" }, { value: "2", label: "2 half" }]} onChange={(v) => set({ drawers: Number(v) })} />
               <MeasureField label="Dividers" hint="Walls inside each drawer, side to side." value={spec.dividers} min={0} max={3} step={1} digits={0} suffix="" onChange={(dividers) => set({ dividers })} />
+              <SwitchField id="gridfinity" label="Gridfinity floor" hint="Adds a 42 mm Gridfinity baseplate grid to each drawer floor so standard bins lock in place. Cells only appear where a full 42 mm square fits." checked={spec.gridfinity} onChange={(gridfinity) => set({ gridfinity })} />
             </>
           ) : null}
           {hasSlide ? (

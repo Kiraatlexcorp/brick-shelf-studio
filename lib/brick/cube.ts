@@ -365,6 +365,26 @@ function buildSlide(m: ManifoldToplevel, spec: CubeSpec, Lw: number, H: number) 
 }
 
 /** Drawer box with rear runners, a front plate covering the opening, a pull and a label slot. */
+/** Gridfinity baseplate ridges: 42 mm cells, 4.65 mm tall, 45° flanks (prints without support). */
+export function gridfinityFloor(m: ManifoldToplevel, x: number, y: number, z: number, w: number, d: number) {
+  const P = 42, H = 4.65, top = 0.8;
+  const nx = Math.floor(w / P), ny = Math.floor(d / P);
+  if (!nx || !ny) return m.Manifold.cube([0.01, 0.01, 0.01]).translate([x, y, z]);
+  const ox = x + (w - nx * P) / 2, oy = y + (d - ny * P) / 2;
+  const hb = Math.min(H, 2.85), ht = top / 2;
+  const ridge = (a: Vec3, b: Vec3, alongX: boolean) => {
+    const pts: Vec3[] = [];
+    for (const q of [a, b]) for (const [o, h] of [[hb, 0], [ht, H]] as const)
+      for (const sgn of [-1, 1]) pts.push(alongX ? [q[0], q[1] + sgn * o, q[2] + h] : [q[0] + sgn * o, q[1], q[2] + h]);
+    return m.Manifold.hull(pts);
+  };
+  const parts = [];
+  const cl = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+  for (let i = 0; i <= nx; i++) { const gx = cl(ox + i * P, x + hb, x + w - hb); parts.push(ridge([gx, y, z], [gx, y + d, z], false)); }
+  for (let j = 0; j <= ny; j++) { const gy = cl(oy + j * P, y + hb, y + d - hb); parts.push(ridge([x, gy, z], [x + w, gy, z], true)); }
+  return m.Manifold.union(parts);
+}
+
 function buildDrawer(
   m: ManifoldToplevel,
   spec: CubeSpec,
@@ -382,6 +402,7 @@ function buildDrawer(
   boxS = boxS.subtract(M.cube([bw - 2 * sh, o.depth - 2 * sh, bh]).translate([x0 + sh, sh, z0 + sh]));
   for (let i = 1; i <= spec.dividers; i++)
     boxS = boxS.add(M.cube([1.2, o.depth - 2 * sh, bh - 3]).translate([x0 + (bw * i) / (spec.dividers + 1) - 0.6, sh, z0 + sh]));
+  if (spec.gridfinity) boxS = boxS.add(gridfinityFloor(m, x0 + sh, sh, z0 + sh, bw - 2 * sh, o.depth - 2 * sh));
   // Runners at the back of both sides ride in the wall grooves; the groove lip stops them at the front.
   const rl = 16;
   const rh = GROOVE.height - 2 * c;

@@ -81,6 +81,8 @@ export type CubeSpec = {
   side: BaseJoint;
   /** Single cube: clip keys become flush half plugs, nothing sticks out past the faces. */
   solo: boolean;
+  /** Gridfinity baseplate grid (42 mm cells) on the drawer floor. */
+  gridfinity: boolean;
   /** Wall mode: printed wall rail plus a hook on the back, so the cube floats. */
   wallMount: boolean;
 };
@@ -109,6 +111,7 @@ export const DEFAULT_CUBE: CubeSpec = {
   side: "rail",
   wallMount: false,
   solo: false,
+  gridfinity: false,
 };
 
 export const CLEARANCES = [0.1, 0.2, 0.3] as const;
@@ -136,6 +139,7 @@ export function normalize(spec: CubeSpec): CubeSpec {
   s.wallMount = !!s.wallMount && s.back === "wall";
   if (s.wallMount) s.bolts = true;
   s.solo = !!s.solo;
+  s.gridfinity = !!s.gridfinity;
   if (!BASE_JOINTS.includes(s.stack)) s.stack = "twist";
   if (!BASE_JOINTS.includes(s.side)) s.side = "rail";
   const stack = s.joint === "mixed" ? s.stack : s.joint;

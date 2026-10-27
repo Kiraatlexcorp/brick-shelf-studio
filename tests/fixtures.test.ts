@@ -111,3 +111,17 @@ describe("sliding doors and strength", () => {
     expect(previewParts(parts, true).every((p) => p.group && p.out)).toBe(true);
   });
 });
+
+describe("gridfinity drawer floor", () => {
+  it("adds 42 mm ridges inside the drawer without breaking clearance", () => {
+    noOverlap({ ...DEFAULT_CUBE, front: "drawer", drawers: 1, gridfinity: true }, true);
+    const base: CubeSpec = { ...DEFAULT_CUBE, front: "drawer", drawers: 1, dividers: 0 };
+    const plain = buildCube(m, base).find((p) => p.kind === "drawer-1")!;
+    const grid = buildCube(m, { ...base, gridfinity: true }).find((p) => p.kind === "drawer-1")!;
+    expect(grid.solid.volume()).toBeGreaterThan(plain.solid.volume() + 1000);
+    const b = grid.solid.boundingBox(), pb = plain.solid.boundingBox();
+    for (const k of [0, 1, 2]) { expect(b.min[k]).toBeCloseTo(pb.min[k], 3); expect(b.max[k]).toBeCloseTo(pb.max[k], 3); }
+    expect(grid.solid.status()).toBe("NoError");
+  });
+});
+
