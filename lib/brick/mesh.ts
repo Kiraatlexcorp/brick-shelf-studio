@@ -8,6 +8,9 @@ export type MeshPart = {
   placeX: number;
   placeY: number;
   placeZ: number;
+  /** Preview colour group and explode direction. */
+  group?: string;
+  out?: [number, number, number];
 };
 
 export function toPart(name: string, solid: Manifold, place = { x: 0, y: 0, z: 0 }): MeshPart {

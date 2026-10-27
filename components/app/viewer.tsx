@@ -5,25 +5,15 @@ import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import type { MeshPart } from "@/lib/brick/mesh";
-import type { PanelKind } from "@/lib/brick/spec";
 
-const COLOR: Record<PanelKind, string> = {
-  top: "#d6402b",
-  bottom: "#d6402b",
-  left: "#f2c230",
-  right: "#f2c230",
+const COLOR: Record<string, string> = {
+  deck: "#d6402b",
+  side: "#f2c230",
   back: "#2f6fd6",
   front: "#3aa35b",
-};
-
-/** How far each panel moves out when exploded, as a unit direction. */
-const OUT: Record<PanelKind, [number, number, number]> = {
-  top: [0, 0, 1],
-  bottom: [0, 0, -1],
-  left: [-1, 0, 0],
-  right: [1, 0, 0],
-  back: [0, 1, 0],
-  front: [0, -1, 0],
+  door: "#3aa35b",
+  drawer: "#f4f1ea",
+  slide: "#7ab8e8",
 };
 
 function Part({ part, explode }: { part: MeshPart; explode: number }) {
@@ -34,11 +24,10 @@ function Part({ part, explode }: { part: MeshPart; explode: number }) {
     g.computeVertexNormals();
     return g;
   }, [part]);
-  const kind = part.name as PanelKind;
-  const o = OUT[kind];
+  const o = part.out ?? [0, 0, 0];
   return (
     <mesh geometry={geometry} position={[o[0] * explode, o[1] * explode, o[2] * explode]}>
-      <meshStandardMaterial color={COLOR[kind]} roughness={0.55} flatShading />
+      <meshStandardMaterial color={COLOR[part.group ?? "deck"] ?? "#d6402b"} roughness={0.55} flatShading />
     </mesh>
   );
 }
