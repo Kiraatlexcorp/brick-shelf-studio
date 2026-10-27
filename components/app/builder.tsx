@@ -164,6 +164,9 @@ function Controls({ spec, set, exploded, setExploded, open, setOpen, onFitTest, 
       ) : null}
       <SectionCard id="connection" title="Connection">
         <Choice<Joint> label="Joint" hint={JOINT_HINT[spec.joint]} value={spec.joint} options={JOINT_OPTIONS} onChange={(joint) => set({ joint })} />
+        {spec.back === "wall" ? (
+          <SwitchField id="wallmount" label="Wall mode" hint="Floating cube: print the wall rail, screw it to the wall, bolt the hook to the back wall with two M4 bolts, then drop the cube on. Turns bolt holes on." checked={spec.wallMount} onChange={(wallMount) => set({ wallMount })} />
+        ) : null}
       </SectionCard>
       <SectionCard id="strength" title="Strength">
         <Choice label="Wall" hint="Panel thickness. 5 mm with ribs and gussets is the 10 kg default; 6 mm or more if you use drawers and dovetails." value={String(spec.wall)}
