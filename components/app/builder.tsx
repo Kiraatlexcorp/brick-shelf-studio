@@ -19,6 +19,7 @@ import {
   type Layout,
 } from "@/lib/brick/layout";
 import { LAYOUT_TEMPLATES } from "@/lib/brick/templates";
+import { fitGrid, gridLayout } from "@/lib/brick/measure";
 import { capacity, suggest } from "@/lib/brick/strength";
 import type { MeshPart } from "@/lib/brick/mesh";
 import { meshTo3mf } from "@/lib/export/threemf";
@@ -246,24 +247,36 @@ function Controls({ spec, set, exploded, setExploded, open, setOpen, onFitTest, 
 
 function CanvasCard({
   layout,
+  spec,
   onAddCube,
   onMoveCube,
   onRemoveCube,
   onLoadCube,
   onApplyTemplate,
+  onUseGrid,
   onDownloadAll,
   ready,
 }: {
   layout: Layout;
+  spec: CubeSpec;
   onAddCube: () => void;
   onMoveCube: (id: string, dx: number, dz: number) => void;
   onRemoveCube: (id: string) => void;
   onLoadCube: (spec: CubeSpec) => void;
   onApplyTemplate: (templateId: string) => void;
+  onUseGrid: (layout: Layout) => void;
   onDownloadAll: () => void;
   ready: boolean;
 }) {
   const size = layoutSizeMm(layout);
+  const [spaceW, setSpaceW] = useState(800);
+  const [spaceH, setSpaceH] = useState(600);
+  const [spaceD, setSpaceD] = useState(300);
+
+  const fit = useMemo(
+    () => fitGrid({ w: spaceW, h: spaceH, d: spaceD }, spec),
+    [spaceW, spaceH, spaceD, spec]
+  );
 
   return (
     <SectionCard id="canvas" title="Canvas">
@@ -308,6 +321,61 @@ function CanvasCard({
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+        </div>
+
+        <div className="flex flex-col gap-2 rounded-lg border bg-muted/20 p-2.5">
+          <span className="text-xs font-medium">Measure your space</span>
+          <div className="grid grid-cols-3 gap-1.5">
+            <MeasureField
+              label="W"
+              suffix="mm"
+              min={10}
+              max={5000}
+              step={10}
+              digits={0}
+              value={spaceW}
+              onChange={setSpaceW}
+            />
+            <MeasureField
+              label="H"
+              suffix="mm"
+              min={10}
+              max={5000}
+              step={10}
+              digits={0}
+              value={spaceH}
+              onChange={setSpaceH}
+            />
+            <MeasureField
+              label="D"
+              suffix="mm"
+              min={10}
+              max={5000}
+              step={10}
+              digits={0}
+              value={spaceD}
+              onChange={setSpaceD}
+            />
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {fit.fits ? (
+              <span>
+                Fits {fit.cols} × {fit.rows} cubes (used {fit.used.w}×{fit.used.h} mm, {fit.leftover.w} mm spare)
+              </span>
+            ) : (
+              <span className="text-destructive">{fit.reason}</span>
+            )}
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="w-full justify-center"
+            disabled={!fit.fits || fit.cols === 0 || fit.rows === 0}
+            onClick={() => onUseGrid(gridLayout(spec, fit.cols, fit.rows))}
+          >
+            Use this grid
+          </Button>
         </div>
 
         <div className="flex items-center justify-between text-xs text-muted-foreground border-y py-1.5">
@@ -490,6 +558,7 @@ export function Builder() {
             <BrickPresetsCard spec={spec} onChange={setSpec} />
             <CanvasCard
               layout={layout}
+              spec={spec}
               onAddCube={() => {
                 setLayout((l) => addCube(l, spec));
                 show("Cube added to canvas");
@@ -508,6 +577,10 @@ export function Builder() {
                 if (!t) return;
                 setLayout(t.build(spec));
                 show(`Applied "${t.name}" template`);
+              }}
+              onUseGrid={(newLayout) => {
+                setLayout(newLayout);
+                show("Grid layout applied");
               }}
               onDownloadAll={downloadAll}
               ready={ready}
