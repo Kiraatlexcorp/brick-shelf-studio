@@ -80,7 +80,19 @@ describe("doors", () => {
 describe("sliding doors and strength", () => {
   it("sliding panels clear the cube", () => {
     noOverlap({ ...DEFAULT_CUBE, front: "slide", panels: 2 });
+    noOverlap({ ...DEFAULT_CUBE, front: "slide", panels: 2 }, true);
+    noOverlap({ ...DEFAULT_CUBE, front: "slide", panels: 1 });
     noOverlap({ ...DEFAULT_CUBE, front: "slide", panels: 1 }, true);
+  });
+  it("finger pulls are recessed and clear of the other panel", () => {
+    const parts = buildCube(m, { ...DEFAULT_CUBE, front: "slide", panels: 2 });
+    const [a, b] = parts.filter((p) => p.group === "slide");
+    for (const p of [a, b]) expect(p.solid.genus()).toBe(0); // no through-hole
+    const ba = a.solid.boundingBox(), bb = b.solid.boundingBox();
+    const ov = m.Manifold.cube([ba.max[0] - bb.min[0], 40, 400]).translate([bb.min[0], -10, -10]);
+    const full = (s: typeof a.solid) => m.Manifold.hull([s]);
+    // inside the overlap band both panels are solid (no pull cut there)
+    for (const p of [a, b]) expect(full(p.solid).intersect(ov).volume() - p.solid.intersect(ov).volume()).toBeLessThan(0.05);
   });
   it("dovetails of side-by-side cubes interlock without overlap", () => {
     const a = buildCube(m, DEFAULT_CUBE);

@@ -330,8 +330,17 @@ function buildSlide(m: ManifoldToplevel, spec: CubeSpec, Lw: number, H: number) 
     grooves.push(M.cube([span, t + 2 * c, gTop + 0.01]).translate([spec.wall, y0, H - DECK - 0.01]));
     const x0 = i === 0 ? spec.wall + c / 2 : Lw - spec.wall - c / 2 - pw;
     let p = M.cube([pw, t, ph]).translate([x0, y0 + c, DECK - gBot]);
-    const fx = i === 0 ? x0 + pw - 10 : x0 + 10;
-    p = p.subtract(M.cylinder(t + 2, 6, 6, 32).rotate([-90, 0, 0]).translate([fx, y0 + c - 1, DECK - gBot + ph / 2]));
+    // Recessed finger pull on the outward face only (no through-hole), placed outside the
+    // overlap band so the other panel or the frame never covers or catches it.
+    const overlap = spec.panels === 2 ? 2 * pw - span : 0;
+    const inset = overlap + 12;
+    const fx = i === 0 ? x0 + pw - inset : x0 + inset;
+    const zc = DECK - gBot + ph / 2;
+    const slotH = Math.min(36, ph * 0.4);
+    const depth = 1.6;
+    const cup = M.cylinder(depth + 0.01, 6, 6, 32).rotate([-90, 0, 0]);
+    const pull = M.hull([cup.translate([fx, y0 + c - 0.01, zc - slotH / 2 + 6]), cup.translate([fx, y0 + c - 0.01, zc + slotH / 2 - 6])]);
+    p = p.subtract(pull);
     const shift = span - pw - c;
     panels.push({ solid: p, open: p.translate([i === 0 ? shift : -shift, 0, 0]) });
   }
