@@ -84,6 +84,7 @@ const JOINT_OPTIONS: { value: Joint; label: string }[] = [
   { value: "lego", label: "Lego" },
   { value: "twist", label: "Acmie Lock" },
   { value: "rail", label: "Slide rail" },
+  { value: "clip", label: "Clip key" },
 ];
 const JOINT_HINT: Record<Joint, string> = {
   lego: "Studs on top, sockets underneath, dovetail rails between neighbours.",
