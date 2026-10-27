@@ -1,7 +1,7 @@
 import type { ManifoldToplevel } from "manifold-3d";
 import { buildCube, printParts } from "@/lib/brick/cube";
 import type { MeshPart } from "@/lib/brick/mesh";
-import { normalize, UNIT, type CubeSpec } from "@/lib/brick/spec";
+import { DEFAULT_CUBE, normalize, UNIT, type CubeSpec } from "@/lib/brick/spec";
 
 export type Placed = {
   id: string;
@@ -216,4 +216,154 @@ export function layoutPrintParts(m: ManifoldToplevel, layout: Layout): MeshPart[
     }
   });
   return parts;
+}
+
+export type LayoutPlacement = {
+  id: string;
+  offset: [number, number, number];
+  cube: Placed;
+};
+
+/**
+ * Computes the 3D mm offset [x, y, z] for each placed cube in the layout.
+ * Uses the exact column width and row height spacing of layoutSizeMm so stacked cubes sit on each other.
+ */
+export function layoutPlacements(layout: Layout): LayoutPlacement[] {
+  if (layout.cubes.length === 0) {
+    return [];
+  }
+  const { cols, rows } = layoutBounds(layout);
+
+  const fallbackW = Math.max(...layout.cubes.map((c) => cubeSizeMm(c.spec).w));
+  const fallbackH = Math.max(...layout.cubes.map((c) => cubeSizeMm(c.spec).h));
+
+  const colWidths: number[] = [];
+  for (let x = 0; x < cols; x++) {
+    const colCubes = layout.cubes.filter((c) => c.x === x);
+    colWidths[x] =
+      colCubes.length > 0
+        ? Math.max(...colCubes.map((c) => cubeSizeMm(c.spec).w))
+        : fallbackW;
+  }
+
+  const colXOffsets: number[] = [0];
+  for (let x = 1; x < cols; x++) {
+    colXOffsets[x] = colXOffsets[x - 1] + colWidths[x - 1];
+  }
+
+  const rowHeights: number[] = [];
+  for (let z = 0; z < rows; z++) {
+    const rowCubes = layout.cubes.filter((c) => c.z === z);
+    rowHeights[z] =
+      rowCubes.length > 0
+        ? Math.max(...rowCubes.map((c) => cubeSizeMm(c.spec).h))
+        : fallbackH;
+  }
+
+  const rowZOffsets: number[] = [0];
+  for (let z = 1; z < rows; z++) {
+    rowZOffsets[z] = rowZOffsets[z - 1] + rowHeights[z - 1];
+  }
+
+  return layout.cubes.map((cube) => ({
+    id: cube.id,
+    offset: [colXOffsets[cube.x] ?? 0, 0, rowZOffsets[cube.z] ?? 0],
+    cube,
+  }));
+}
+
+export const CANVAS_STORAGE_KEY = "brick-canvas-v1";
+
+export function parseCanvasStorage(raw: string | null | undefined): {
+  layout: Layout;
+  selectedId: string | null;
+} {
+  const fallback: { layout: Layout; selectedId: string | null } = {
+    layout: { cubes: [] },
+    selectedId: null,
+  };
+
+  if (!raw || typeof raw !== "string") {
+    return fallback;
+  }
+
+  try {
+    const data = JSON.parse(raw);
+    if (!data || typeof data !== "object") {
+      return fallback;
+    }
+
+    const rawCubes = (data as { layout?: { cubes?: unknown } })?.layout?.cubes;
+    if (!Array.isArray(rawCubes)) {
+      return fallback;
+    }
+
+    const validCubes: Placed[] = [];
+    for (const c of rawCubes) {
+      if (!c || typeof c !== "object") continue;
+      const cubeObj = c as Record<string, unknown>;
+      const id =
+        typeof cubeObj.id === "string" && cubeObj.id.length > 0
+          ? cubeObj.id
+          : `cube-${validCubes.length + 1}`;
+      const x =
+        typeof cubeObj.x === "number" && Number.isFinite(cubeObj.x) && cubeObj.x >= 0
+          ? Math.floor(cubeObj.x)
+          : 0;
+      const y =
+        typeof cubeObj.y === "number" && Number.isFinite(cubeObj.y)
+          ? Math.floor(cubeObj.y)
+          : 0;
+      const z =
+        typeof cubeObj.z === "number" && Number.isFinite(cubeObj.z) && cubeObj.z >= 0
+          ? Math.floor(cubeObj.z)
+          : 0;
+      const rawSpec =
+        cubeObj.spec && typeof cubeObj.spec === "object"
+          ? (cubeObj.spec as CubeSpec)
+          : DEFAULT_CUBE;
+      const spec = normalize(rawSpec);
+
+      validCubes.push({
+        id,
+        x,
+        y,
+        z,
+        spec,
+      });
+    }
+
+    let selectedId: string | null = null;
+    const rawSelectedId = (data as { selectedId?: unknown }).selectedId;
+    if (
+      typeof rawSelectedId === "string" &&
+      validCubes.some((c) => c.id === rawSelectedId)
+    ) {
+      selectedId = rawSelectedId;
+    } else if (validCubes.length > 0) {
+      selectedId = validCubes[0].id;
+    }
+
+    return {
+      layout: { cubes: validCubes },
+      selectedId,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+export function saveCanvasStorage(layout: Layout, selectedId: string | null): void {
+  if (typeof window === "undefined" && typeof localStorage === "undefined") return;
+  try {
+    const storage = typeof window !== "undefined" ? window.localStorage : globalThis.localStorage;
+    if (!storage) return;
+    const data = {
+      layout,
+      selectedId,
+    };
+    storage.setItem(CANVAS_STORAGE_KEY, JSON.stringify(data));
+  } catch {
+    // safely ignore storage errors
+  }
 }

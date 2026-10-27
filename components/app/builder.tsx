@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type * as React from "react";
 import dynamic from "next/dynamic";
 import { zipSync } from "fflate";
@@ -11,11 +11,16 @@ import { buildCube, buildFitTile, buildJointFit, previewParts, printParts } from
 import { A1_BED, CLEARANCES, DEFAULT_CUBE, UNIT, WALLS, normalize, type BaseJoint, type CubeSpec, type Hinge, type Joint, type Latch, type Side } from "@/lib/brick/spec";
 import {
   addCube,
+  CANVAS_STORAGE_KEY,
+  cubeSizeMm,
   layoutBounds,
+  layoutPlacements,
   layoutPrintParts,
   layoutSizeMm,
   moveCube,
+  parseCanvasStorage,
   removeCube,
+  saveCanvasStorage,
   type Layout,
 } from "@/lib/brick/layout";
 import { LAYOUT_TEMPLATES } from "@/lib/brick/templates";
@@ -248,6 +253,8 @@ function Controls({ spec, set, exploded, setExploded, open, setOpen, onFitTest, 
 function CanvasCard({
   layout,
   spec,
+  selectedId,
+  onSelectCube,
   onAddCube,
   onMoveCube,
   onRemoveCube,
@@ -259,10 +266,12 @@ function CanvasCard({
 }: {
   layout: Layout;
   spec: CubeSpec;
+  selectedId: string | null;
+  onSelectCube: (id: string) => void;
   onAddCube: () => void;
   onMoveCube: (id: string, dx: number, dz: number) => void;
   onRemoveCube: (id: string) => void;
-  onLoadCube: (spec: CubeSpec) => void;
+  onLoadCube: (id: string) => void;
   onApplyTemplate: (templateId: string) => void;
   onUseGrid: (layout: Layout) => void;
   onDownloadAll: () => void;
@@ -391,80 +400,96 @@ function CanvasCard({
           </p>
         ) : (
           <div className="flex flex-col gap-2 max-h-60 overflow-y-auto pr-0.5">
-            {layout.cubes.map((cube, index) => (
-              <div
-                key={cube.id}
-                className="flex flex-col gap-1.5 rounded-lg border bg-muted/20 p-2 text-xs"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-medium">
-                    Cube {index + 1}: {cube.spec.w}×{cube.spec.d}×{cube.spec.h}u
-                  </span>
-                  <span className="font-mono text-[11px] text-muted-foreground">
-                    col {cube.x}, row {cube.z}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between gap-1 pt-0.5">
-                  <div className="flex items-center gap-1">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon-xs"
-                      aria-label={`Move cube ${index + 1} left`}
-                      onClick={() => onMoveCube(cube.id, -1, 0)}
-                    >
-                      ←
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon-xs"
-                      aria-label={`Move cube ${index + 1} right`}
-                      onClick={() => onMoveCube(cube.id, 1, 0)}
-                    >
-                      →
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon-xs"
-                      aria-label={`Move cube ${index + 1} up`}
-                      onClick={() => onMoveCube(cube.id, 0, 1)}
-                    >
-                      ↑
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon-xs"
-                      aria-label={`Move cube ${index + 1} down`}
-                      onClick={() => onMoveCube(cube.id, 0, -1)}
-                    >
-                      ↓
-                    </Button>
+            {layout.cubes.map((cube, index) => {
+              const isSelected = cube.id === selectedId;
+              return (
+                <div
+                  key={cube.id}
+                  onClick={() => onSelectCube(cube.id)}
+                  className={`flex flex-col gap-1.5 rounded-lg border p-2 text-xs transition-colors cursor-pointer ${
+                    isSelected
+                      ? "border-primary ring-1 ring-primary bg-primary/10 dark:bg-primary/20"
+                      : "border-border bg-muted/20 hover:bg-muted/40"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium flex items-center gap-1.5">
+                      Cube {index + 1}: {cube.spec.w}×{cube.spec.d}×{cube.spec.h}u
+                      {isSelected ? (
+                        <span className="rounded bg-primary text-primary-foreground px-1.5 py-0.5 text-[10px] font-semibold leading-none">
+                          Selected
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="font-mono text-[11px] text-muted-foreground">
+                      col {cube.x}, row {cube.z}
+                    </span>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="xs"
-                      onClick={() => onLoadCube(cube.spec)}
-                    >
-                      Load into editor
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="xs"
-                      className="text-destructive hover:text-destructive"
-                      onClick={() => onRemoveCube(cube.id)}
-                    >
-                      Remove
-                    </Button>
+                  <div
+                    className="flex items-center justify-between gap-1 pt-0.5"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex items-center gap-1">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon-xs"
+                        aria-label={`Move cube ${index + 1} left`}
+                        onClick={() => onMoveCube(cube.id, -1, 0)}
+                      >
+                        ←
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon-xs"
+                        aria-label={`Move cube ${index + 1} right`}
+                        onClick={() => onMoveCube(cube.id, 1, 0)}
+                      >
+                        →
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon-xs"
+                        aria-label={`Move cube ${index + 1} up`}
+                        onClick={() => onMoveCube(cube.id, 0, 1)}
+                      >
+                        ↑
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon-xs"
+                        aria-label={`Move cube ${index + 1} down`}
+                        onClick={() => onMoveCube(cube.id, 0, -1)}
+                      >
+                        ↓
+                      </Button>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        type="button"
+                        variant={isSelected ? "secondary" : "outline"}
+                        size="xs"
+                        onClick={() => onLoadCube(cube.id)}
+                      >
+                        {isSelected ? "Editing" : "Load into editor"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => onRemoveCube(cube.id)}
+                      >
+                        Remove
+                      </Button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -487,6 +512,8 @@ export function Builder() {
   const [m, setM] = useState<ManifoldToplevel | null>(null);
   const [spec, setSpec] = useState<CubeSpec>(DEFAULT_CUBE);
   const [layout, setLayout] = useState<Layout>({ cubes: [] });
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [hasHydrated, setHasHydrated] = useState(false);
   const [exploded, setExploded] = useState(false);
   const [open, setOpen] = useState(false);
   const { toast, show } = useToast();
@@ -499,27 +526,131 @@ export function Builder() {
     if (preset) setSpec(preset.spec);
     if (q.get("open") === "1") setOpen(true);
     if (q.get("explode") === "1") setExploded(true);
+
+    try {
+      const raw = typeof window !== "undefined" ? localStorage.getItem(CANVAS_STORAGE_KEY) : null;
+      if (raw) {
+        const parsed = parseCanvasStorage(raw);
+        if (parsed.layout.cubes.length > 0) {
+          setLayout(parsed.layout);
+          setSelectedId(parsed.selectedId);
+          const activeCube =
+            parsed.layout.cubes.find((c) => c.id === parsed.selectedId) ?? parsed.layout.cubes[0];
+          if (activeCube) {
+            setSpec(activeCube.spec);
+          }
+        }
+      }
+    } catch {
+      // safe fallback on storage error
+    } finally {
+      setHasHydrated(true);
+    }
     /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
 
+  const activeSelectedId = useMemo(() => {
+    if (layout.cubes.length === 0) return null;
+    if (selectedId && layout.cubes.some((c) => c.id === selectedId)) {
+      return selectedId;
+    }
+    return layout.cubes[0]?.id ?? null;
+  }, [layout.cubes, selectedId]);
+
+  useEffect(() => {
+    if (!hasHydrated) return;
+    saveCanvasStorage(layout, activeSelectedId);
+  }, [layout, activeSelectedId, hasHydrated]);
+
+  const previewCache = useRef(new Map<string, MeshPart[]>());
+
+  useEffect(() => {
+    previewCache.current.clear();
+  }, [m]);
+
+  const getCubeParts = (cubeSpec: CubeSpec, isOpen: boolean): MeshPart[] => {
+    if (!m) return [];
+    const normalized = normalize(cubeSpec);
+    const key = `${JSON.stringify(normalized)}:${isOpen ? "open" : "closed"}`;
+    const cached = previewCache.current.get(key);
+    if (cached) return cached;
+    const cubePanels = buildCube(m, normalized);
+    const meshParts = previewParts(cubePanels, isOpen);
+    previewCache.current.set(key, meshParts);
+    return meshParts;
+  };
+
+  const selectCube = (id: string) => {
+    setSelectedId(id);
+    const target = layout.cubes.find((c) => c.id === id);
+    if (target) {
+      setSpec(target.spec);
+    }
+  };
+
+  const applySpec = (newSpec: CubeSpec) => {
+    const next = normalize(newSpec);
+    setSpec(next);
+    if (activeSelectedId) {
+      setLayout((prev) => ({
+        cubes: prev.cubes.map((c) =>
+          c.id === activeSelectedId ? { ...c, spec: next } : c
+        ),
+      }));
+    }
+  };
+
+  const set = (patch: Partial<CubeSpec>) => {
+    applySpec({ ...spec, ...patch });
+  };
+
   const [fitView, setFitView] = useState(false);
-  const panels = useMemo(() => (m ? (fitView ? buildJointFit(m, spec) : buildCube(m, spec)) : []), [m, spec, fitView]);
-  const parts = useMemo(() => previewParts(panels, open), [panels, open]);
-  const set = (patch: Partial<CubeSpec>) => setSpec((s) => normalize({ ...s, ...patch }));
+  const singlePanels = useMemo(
+    () => (m ? (fitView ? buildJointFit(m, spec) : buildCube(m, spec)) : []),
+    [m, spec, fitView]
+  );
+  const singleParts = useMemo(
+    () => previewParts(singlePanels, open),
+    [singlePanels, open]
+  );
+
+  const placements = useMemo(() => layoutPlacements(layout), [layout]);
+
+  const viewerCubes = useMemo(() => {
+    if (!m || layout.cubes.length === 0) return [];
+    return placements.map((p) => {
+      const cubeParts = getCubeParts(p.cube.spec, open);
+      const s = cubeSizeMm(p.cube.spec);
+      return {
+        id: p.id,
+        parts: cubeParts,
+        offset: p.offset,
+        size: [s.w, s.d, s.h] as [number, number, number],
+        isSelected: p.id === activeSelectedId,
+      };
+    });
+  }, [m, layout.cubes, placements, open, activeSelectedId]);
+
+  const layoutSize = useMemo(() => layoutSizeMm(layout), [layout]);
+  const viewerSize: [number, number, number] = useMemo(() => {
+    if (layout.cubes.length > 0) {
+      return [layoutSize.w, layoutSize.d, layoutSize.h];
+    }
+    return [spec.w * UNIT, spec.d * UNIT, spec.h * UNIT];
+  }, [layout.cubes.length, layoutSize, spec.w, spec.d, spec.h]);
+
   const stem = `acmie-brick-${spec.w}x${spec.d}x${spec.h}`;
   const ready = !!m;
 
   const download = (kind: "3mf" | "stl") => {
     if (!m) return;
-    // Download is always the full cube, even while the fit-test preview is on.
-    const full = fitView && m ? buildCube(m, spec) : panels;
+    const full = fitView && m ? buildCube(m, spec) : singlePanels;
     if (kind === "3mf") save(meshTo3mf(printParts(full), A1_BED, "Brick cube"), `${stem}.3mf`, "model/3mf");
     else saveStls(printParts(full), stem);
     show(`${stem} ${kind.toUpperCase()} downloaded`);
   };
   const fitTest = () => {
     if (!m) return;
-    // Clearance tile plus a 1-unit test of the chosen joint, on one plate.
     const parts = [...buildFitTile(m), ...printParts(buildJointFit(m, spec)).map((p) => ({ ...p, name: `fit-${p.name}` }))];
     save(meshTo3mf(parts, A1_BED, "Fit test"), `acmie-brick-fit-${spec.joint}.3mf`, "model/3mf");
     show("Fit test downloaded");
@@ -538,7 +669,7 @@ export function Builder() {
 
   const stats = [
     { label: "Outer size", value: `${spec.w * UNIT} × ${spec.d * UNIT} × ${spec.h * UNIT} mm`, note: "outer" },
-    { label: "Parts", value: String(panels.length), note: "parts to print" },
+    { label: "Parts", value: String(singlePanels.length), note: "parts to print" },
     { label: "Fit", value: `${spec.clearance} mm`, note: "clearance" },
   ];
 
@@ -555,31 +686,63 @@ export function Builder() {
         </SidebarHeader>
         <SidebarContent className="px-2 pt-1 pb-4">
           <div className="motion-stagger flex shrink-0 flex-col gap-3">
-            <BrickPresetsCard spec={spec} onChange={setSpec} />
+            <BrickPresetsCard spec={spec} onChange={applySpec} />
             <CanvasCard
               layout={layout}
               spec={spec}
+              selectedId={activeSelectedId}
+              onSelectCube={selectCube}
               onAddCube={() => {
-                setLayout((l) => addCube(l, spec));
-                show("Cube added to canvas");
+                const next = addCube(layout, spec);
+                if (next !== layout) {
+                  setLayout(next);
+                  const added = next.cubes[next.cubes.length - 1];
+                  if (added) {
+                    setSelectedId(added.id);
+                    setSpec(added.spec);
+                  }
+                  show("Cube added to canvas");
+                }
               }}
-              onMoveCube={(id, dx, dz) => setLayout((l) => moveCube(l, id, dx, dz))}
+              onMoveCube={(id, dx, dz) => {
+                setLayout((l) => moveCube(l, id, dx, dz));
+                setSelectedId(id);
+                const target = layout.cubes.find((c) => c.id === id);
+                if (target) setSpec(target.spec);
+              }}
               onRemoveCube={(id) => {
-                setLayout((l) => removeCube(l, id));
+                const next = removeCube(layout, id);
+                setLayout(next);
+                if (activeSelectedId === id) {
+                  const nextCube = next.cubes[0];
+                  setSelectedId(nextCube?.id ?? null);
+                  if (nextCube) setSpec(nextCube.spec);
+                }
                 show("Cube removed from canvas");
               }}
-              onLoadCube={(s) => {
-                setSpec(s);
+              onLoadCube={(id) => {
+                selectCube(id);
                 show("Loaded cube into editor");
               }}
               onApplyTemplate={(id) => {
                 const t = LAYOUT_TEMPLATES.find((tpl) => tpl.id === id);
                 if (!t) return;
-                setLayout(t.build(spec));
+                const next = t.build(spec);
+                setLayout(next);
+                const first = next.cubes[0];
+                if (first) {
+                  setSelectedId(first.id);
+                  setSpec(first.spec);
+                }
                 show(`Applied "${t.name}" template`);
               }}
               onUseGrid={(newLayout) => {
                 setLayout(newLayout);
+                const first = newLayout.cubes[0];
+                if (first) {
+                  setSelectedId(first.id);
+                  setSpec(first.spec);
+                }
                 show("Grid layout applied");
               }}
               onDownloadAll={downloadAll}
@@ -647,7 +810,13 @@ export function Builder() {
           <Card className="relative -mx-3 min-h-[62svh] flex-1 gap-0 rounded-none border-0 p-0 shadow-none ring-0 md:mx-0 md:min-h-0 md:rounded-xl md:border md:shadow-sm md:ring-1">
             <div className="absolute inset-0">
               {m ? (
-                <Viewer parts={parts} size={[spec.w * UNIT, spec.d * UNIT, spec.h * UNIT]} explode={exploded ? 30 : 0} />
+                <Viewer
+                  parts={singleParts}
+                  cubes={viewerCubes}
+                  size={viewerSize}
+                  explode={exploded ? 30 : 0}
+                  onSelectCube={selectCube}
+                />
               ) : (
                 <div className="grid h-full place-items-center font-mono text-[10px] tracking-[0.22em] text-muted-foreground">DRAWING</div>
               )}
