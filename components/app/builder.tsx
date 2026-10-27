@@ -13,6 +13,7 @@ import {
   addCube,
   CANVAS_STORAGE_KEY,
   cubeSizeMm,
+  defaultLayout,
   layoutBounds,
   layoutPlacements,
   layoutPrintParts,
@@ -493,6 +494,10 @@ function CanvasCard({
           </div>
         )}
 
+        <p className="text-xs text-muted-foreground">
+          ← → move or swap · ↑ stacks onto the next column · ↓ brings it down
+        </p>
+
         <Button
           type="button"
           size="sm"
@@ -511,8 +516,8 @@ function CanvasCard({
 export function Builder() {
   const [m, setM] = useState<ManifoldToplevel | null>(null);
   const [spec, setSpec] = useState<CubeSpec>(DEFAULT_CUBE);
-  const [layout, setLayout] = useState<Layout>({ cubes: [] });
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [layout, setLayout] = useState<Layout>(() => defaultLayout(DEFAULT_CUBE));
+  const [selectedId, setSelectedId] = useState<string | null>("cube-1");
   const [hasHydrated, setHasHydrated] = useState(false);
   const [exploded, setExploded] = useState(false);
   const [open, setOpen] = useState(false);
@@ -523,14 +528,18 @@ export function Builder() {
     const q = new URLSearchParams(window.location.search);
     const preset = BRICK_PRESETS.find((p) => p.id === q.get("preset"));
     /* eslint-disable react-hooks/set-state-in-effect */
-    if (preset) setSpec(preset.spec);
+    let currentSpec = DEFAULT_CUBE;
+    if (preset) {
+      currentSpec = preset.spec;
+      setSpec(preset.spec);
+    }
     if (q.get("open") === "1") setOpen(true);
     if (q.get("explode") === "1") setExploded(true);
 
     try {
       const raw = typeof window !== "undefined" ? localStorage.getItem(CANVAS_STORAGE_KEY) : null;
       if (raw) {
-        const parsed = parseCanvasStorage(raw);
+        const parsed = parseCanvasStorage(raw, currentSpec);
         if (parsed.layout.cubes.length > 0) {
           setLayout(parsed.layout);
           setSelectedId(parsed.selectedId);
@@ -540,9 +549,15 @@ export function Builder() {
             setSpec(activeCube.spec);
           }
         }
+      } else {
+        const fresh = defaultLayout(currentSpec);
+        setLayout(fresh);
+        setSelectedId(fresh.cubes[0].id);
       }
     } catch {
-      // safe fallback on storage error
+      const fresh = defaultLayout(currentSpec);
+      setLayout(fresh);
+      setSelectedId(fresh.cubes[0].id);
     } finally {
       setHasHydrated(true);
     }
@@ -716,7 +731,15 @@ export function Builder() {
                 if (target) setSpec(target.spec);
               }}
               onRemoveCube={(id) => {
+                if (layout.cubes.length <= 1) {
+                  show("Keep at least one cube");
+                  return;
+                }
                 const next = removeCube(layout, id);
+                if (next === layout || next.cubes.length === layout.cubes.length) {
+                  show("Keep at least one cube");
+                  return;
+                }
                 setLayout(next);
                 if (activeSelectedId === id) {
                   const nextCube = next.cubes[0];

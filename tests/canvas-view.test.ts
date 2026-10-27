@@ -3,6 +3,7 @@ import {
   addCube,
   CANVAS_STORAGE_KEY,
   cubeSizeMm,
+  defaultLayout,
   layoutPlacements,
   parseCanvasStorage,
   saveCanvasStorage,
@@ -103,7 +104,12 @@ describe("layoutPlacements pure helper", () => {
 });
 
 describe("localStorage parse/validate function (parseCanvasStorage)", () => {
-  it("returns an empty layout and null selectedId on bad JSON syntax", () => {
+  const defaultResult = {
+    layout: defaultLayout(DEFAULT_CUBE),
+    selectedId: "cube-1",
+  };
+
+  it("returns default 1-cube layout on bad JSON syntax", () => {
     const badJsons = [
       "{ bad json",
       "undefined",
@@ -114,59 +120,26 @@ describe("localStorage parse/validate function (parseCanvasStorage)", () => {
 
     for (const bad of badJsons) {
       const result = parseCanvasStorage(bad);
-      expect(result).toEqual({
-        layout: { cubes: [] },
-        selectedId: null,
-      });
+      expect(result).toEqual(defaultResult);
     }
   });
 
-  it("returns an empty layout and null selectedId on null, undefined, or empty string", () => {
-    expect(parseCanvasStorage(null)).toEqual({
-      layout: { cubes: [] },
-      selectedId: null,
-    });
-    expect(parseCanvasStorage(undefined)).toEqual({
-      layout: { cubes: [] },
-      selectedId: null,
-    });
-    expect(parseCanvasStorage("")).toEqual({
-      layout: { cubes: [] },
-      selectedId: null,
-    });
+  it("returns default 1-cube layout on null, undefined, or empty string", () => {
+    expect(parseCanvasStorage(null)).toEqual(defaultResult);
+    expect(parseCanvasStorage(undefined)).toEqual(defaultResult);
+    expect(parseCanvasStorage("")).toEqual(defaultResult);
   });
 
-  it("returns an empty layout on valid JSON with invalid shape or non-object root", () => {
-    expect(parseCanvasStorage("123")).toEqual({
-      layout: { cubes: [] },
-      selectedId: null,
-    });
-    expect(parseCanvasStorage('"string"')).toEqual({
-      layout: { cubes: [] },
-      selectedId: null,
-    });
-    expect(parseCanvasStorage("true")).toEqual({
-      layout: { cubes: [] },
-      selectedId: null,
-    });
-    expect(parseCanvasStorage("[]")).toEqual({
-      layout: { cubes: [] },
-      selectedId: null,
-    });
-    expect(parseCanvasStorage("{}")).toEqual({
-      layout: { cubes: [] },
-      selectedId: null,
-    });
-    expect(parseCanvasStorage(JSON.stringify({ layout: null }))).toEqual({
-      layout: { cubes: [] },
-      selectedId: null,
-    });
+  it("returns default 1-cube layout on valid JSON with invalid shape or non-object root", () => {
+    expect(parseCanvasStorage("123")).toEqual(defaultResult);
+    expect(parseCanvasStorage('"string"')).toEqual(defaultResult);
+    expect(parseCanvasStorage("true")).toEqual(defaultResult);
+    expect(parseCanvasStorage("[]")).toEqual(defaultResult);
+    expect(parseCanvasStorage("{}")).toEqual(defaultResult);
+    expect(parseCanvasStorage(JSON.stringify({ layout: null }))).toEqual(defaultResult);
     expect(
       parseCanvasStorage(JSON.stringify({ layout: { cubes: "not-an-array" } }))
-    ).toEqual({
-      layout: { cubes: [] },
-      selectedId: null,
-    });
+    ).toEqual(defaultResult);
   });
 
   it("parses valid layout JSON, normalizes specs, and preserves valid selectedId", () => {

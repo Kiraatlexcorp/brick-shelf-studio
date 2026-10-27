@@ -331,10 +331,32 @@ export function moveCube(
   return { layout: { cubes: applyGravityAndCompaction(nextCubes) } };
 }
 
-/** Removes a cube by id from the layout. */
-export function removeCube(layout: Layout, id: string): Layout {
+/** Creates a default single-cube layout at (0, 0). */
+export function defaultLayout(spec: CubeSpec = DEFAULT_CUBE): Layout {
   return {
-    cubes: layout.cubes.filter((c) => c.id !== id),
+    cubes: [
+      {
+        id: "cube-1",
+        x: 0,
+        y: 0,
+        z: 0,
+        spec: normalize(spec),
+      },
+    ],
+  };
+}
+
+/** Removes a cube by id from the layout. Canvas always keeps at least one cube. */
+export function removeCube(layout: Layout, id: string): Layout {
+  if (layout.cubes.length <= 1) {
+    return layout.cubes.length === 0 ? defaultLayout() : layout;
+  }
+  const nextCubes = layout.cubes.filter((c) => c.id !== id);
+  if (nextCubes.length === 0) {
+    return layout;
+  }
+  return {
+    cubes: nextCubes,
   };
 }
 
@@ -413,16 +435,19 @@ export function layoutPlacements(layout: Layout): LayoutPlacement[] {
 
 export const CANVAS_STORAGE_KEY = "brick-canvas-v1";
 
-export function parseCanvasStorage(raw: string | null | undefined): {
+export function parseCanvasStorage(
+  raw: string | null | undefined,
+  fallbackSpec: CubeSpec = DEFAULT_CUBE
+): {
   layout: Layout;
   selectedId: string | null;
 } {
   const fallback: { layout: Layout; selectedId: string | null } = {
-    layout: { cubes: [] },
-    selectedId: null,
+    layout: defaultLayout(fallbackSpec),
+    selectedId: "cube-1",
   };
 
-  if (!raw || typeof raw !== "string") {
+  if (!raw || typeof raw !== "string" || raw.trim().length === 0) {
     return fallback;
   }
 
@@ -433,7 +458,7 @@ export function parseCanvasStorage(raw: string | null | undefined): {
     }
 
     const rawCubes = (data as { layout?: { cubes?: unknown } })?.layout?.cubes;
-    if (!Array.isArray(rawCubes)) {
+    if (!Array.isArray(rawCubes) || rawCubes.length === 0) {
       return fallback;
     }
 
@@ -470,6 +495,10 @@ export function parseCanvasStorage(raw: string | null | undefined): {
         z,
         spec,
       });
+    }
+
+    if (validCubes.length === 0) {
+      return fallback;
     }
 
     let selectedId: string | null = null;
