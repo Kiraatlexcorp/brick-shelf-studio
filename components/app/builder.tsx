@@ -197,6 +197,9 @@ function Controls({ spec, set, exploded, setExploded, open, setOpen, onFitTest, 
             <Choice<BaseJoint> label="Side (left / right)" hint={JOINT_HINT[spec.side]} value={spec.side} options={BASE_OPTIONS} onChange={(side) => set({ side })} />
           </>
         ) : null}
+        {spec.joint === "clip" || (spec.joint === "mixed" && (spec.stack === "clip" || spec.side === "clip")) ? (
+          <SwitchField id="solo" label="Single cube" hint="Print clip keys as flush half plugs so nothing sticks out of a cube that stands alone." checked={spec.solo} onChange={(solo) => set({ solo })} />
+        ) : null}
         {spec.back === "wall" ? (
           <SwitchField id="wallmount" label="Wall mode" hint="Floating cube: print the wall rail, screw it to the wall, bolt the hook to the back wall with two M4 bolts, then drop the cube on. Turns bolt holes on." checked={spec.wallMount} onChange={(wallMount) => set({ wallMount })} />
         ) : null}

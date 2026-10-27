@@ -143,6 +143,22 @@ describe("joints", () => {
     }
   });
 
+  it("single-cube clip keys sit flush inside the cube", () => {
+    for (const joint of ["clip", "mixed"] as Joint[]) {
+      const { parts } = check(joint, { solo: true, stack: "clip", side: "clip" });
+      const keys = parts.filter((p) => p.kind.startsWith("clip-"));
+      expect(keys.length).toBeGreaterThan(0);
+      for (const k of keys) {
+        const b = k.solid.boundingBox();
+        expect(b.min[0], k.kind).toBeGreaterThanOrEqual(-0.02);
+        expect(b.max[0], k.kind).toBeLessThanOrEqual(2 * UNIT + 0.02);
+        expect(b.min[1], k.kind).toBeGreaterThanOrEqual(-0.02);
+        expect(b.max[1], k.kind).toBeLessThanOrEqual(2 * UNIT + 0.02);
+        expect(b.max[2], k.kind).toBeLessThanOrEqual(2 * UNIT + 0.02);
+      }
+    }
+  });
+
   it("wall mode: hook bolts to the back, bevel drops behind the rail, cube floats", () => {
     for (const h of [1, 2, 4]) {
       const { parts } = check("lego", { wallMount: true, h });

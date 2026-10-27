@@ -184,7 +184,8 @@ export function buildJoints(m: ManifoldToplevel, spec: CubeSpec): JointGeometry 
 
   const t = CLIP.depth;
   const pocket = bowtie(m, t + 0.01, c, true);
-  const key = bowtie(m, t - c, 0, false);
+  // Solo: half plugs fill this cube's pocket and stop flush at the seam.
+  const key = bowtie(m, t - c, 0, spec.solo);
   if (side === "clip") {
     // Side by side: top face of the top deck and bottom face of the bottom deck, at x = 0 and x = W.
     between(spec.d).forEach((y, i) => {
@@ -193,7 +194,11 @@ export function buildJoints(m: ManifoldToplevel, spec: CubeSpec): JointGeometry 
         onL(p.translate([0, y, z - (up ? 0 : 0.01)]));
         onR(p.mirror([1, 0, 0]).translate([W, y, z - (up ? 0 : 0.01)]));
       }
-      partR({ kind: `clip-side-${i + 1}`, group: "joint", solid: key.translate([W, y, H - t + 0.005]), flat: [0, 0, 0], out: [1, 0, 0] });
+      if (spec.solo) {
+        // flush plugs in this cube's own pockets (u >= 0 points away from the seam, into the next cube, so mirror)
+        if (Rt) parts.push({ kind: `clip-side-${i + 1}`, group: "joint", solid: key.mirror([1, 0, 0]).translate([W, y, H - t + 0.005]), flat: [0, 0, 0], out: [1, 0, 0] });
+        if (L) parts.push({ kind: `clip-side-l${i + 1}`, group: "joint", solid: key.translate([0, y, H - t + 0.005]), flat: [0, 0, 0], out: [-1, 0, 0] });
+      } else partR({ kind: `clip-side-${i + 1}`, group: "joint", solid: key.translate([W, y, H - t + 0.005]), flat: [0, 0, 0], out: [1, 0, 0] });
     });
   }
   if (stack === "clip") {
