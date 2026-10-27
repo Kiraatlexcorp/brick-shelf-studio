@@ -5,7 +5,7 @@ import type * as React from "react";
 import dynamic from "next/dynamic";
 import { zipSync } from "fflate";
 import type { ManifoldToplevel } from "manifold-3d";
-import { Download, Expand, Minimize2, Moon, Printer, SlidersHorizontal, Sun } from "lucide-react";
+import { ChevronDown, Download, Expand, Minimize2, Moon, Printer, SlidersHorizontal, Sun } from "lucide-react";
 import { loadManifold } from "@/lib/geometry/manifold";
 import { buildCube, buildFitTile, buildJointFit, previewParts, printParts } from "@/lib/brick/cube";
 import { A1_BED, CLEARANCES, DEFAULT_CUBE, UNIT, WALLS, normalize, type BaseJoint, type CubeSpec, type Hinge, type Joint, type Latch, type Side } from "@/lib/brick/spec";
@@ -18,6 +18,7 @@ import {
   removeCube,
   type Layout,
 } from "@/lib/brick/layout";
+import { LAYOUT_TEMPLATES } from "@/lib/brick/templates";
 import { capacity, suggest } from "@/lib/brick/strength";
 import type { MeshPart } from "@/lib/brick/mesh";
 import { meshTo3mf } from "@/lib/export/threemf";
@@ -249,6 +250,7 @@ function CanvasCard({
   onMoveCube,
   onRemoveCube,
   onLoadCube,
+  onApplyTemplate,
   onDownloadAll,
   ready,
 }: {
@@ -257,6 +259,7 @@ function CanvasCard({
   onMoveCube: (id: string, dx: number, dz: number) => void;
   onRemoveCube: (id: string) => void;
   onLoadCube: (spec: CubeSpec) => void;
+  onApplyTemplate: (templateId: string) => void;
   onDownloadAll: () => void;
   ready: boolean;
 }) {
@@ -265,15 +268,47 @@ function CanvasCard({
   return (
     <SectionCard id="canvas" title="Canvas">
       <div className="flex flex-col gap-2.5">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="w-full justify-center"
-          onClick={onAddCube}
-        >
-          Add this cube
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="flex-1 justify-center"
+            onClick={onAddCube}
+          >
+            Add this cube
+          </Button>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 justify-between gap-1"
+                >
+                  <span className="truncate">Templates</span>
+                  <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end" className="w-64">
+              {LAYOUT_TEMPLATES.map((t) => (
+                <DropdownMenuItem
+                  key={t.id}
+                  className="items-start"
+                  onClick={() => onApplyTemplate(t.id)}
+                >
+                  <span className="flex flex-col">
+                    <span className="font-medium">{t.name}</span>
+                    <span className="text-xs text-muted-foreground">{t.hint}</span>
+                  </span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
 
         <div className="flex items-center justify-between text-xs text-muted-foreground border-y py-1.5">
           <span>Overall size:</span>
@@ -467,6 +502,12 @@ export function Builder() {
               onLoadCube={(s) => {
                 setSpec(s);
                 show("Loaded cube into editor");
+              }}
+              onApplyTemplate={(id) => {
+                const t = LAYOUT_TEMPLATES.find((tpl) => tpl.id === id);
+                if (!t) return;
+                setLayout(t.build(spec));
+                show(`Applied "${t.name}" template`);
               }}
               onDownloadAll={downloadAll}
               ready={ready}
