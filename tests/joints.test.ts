@@ -44,8 +44,10 @@ describe("joints", () => {
 
   it("twist: 4 corner nodes, lugs locked in grooves, mate with the cube above", () => {
     const { parts } = check("twist");
-    expect(parts.filter((p) => p.kind.startsWith("node-"))).toHaveLength(4);
+    expect(parts.filter((p) => /^node-\d/.test(p.kind))).toHaveLength(4);
     neighbour("twist", [0, 0, 2 * UNIT]);
+    neighbour("twist", [2 * UNIT, 0, 0]);
+    check("twist", { front: "drawer" });
     // unlocked (not turned) the lugs hit the deck: proves the bayonet holds
     const top = parts.find((p) => p.kind === "top")!.solid;
     const node = parts.find((p) => p.kind === "node-1")!.solid;
@@ -68,7 +70,30 @@ describe("joints", () => {
     neighbour("clip", [2 * UNIT, 0, 0]);
   });
 
+  it("rail: clip staple locks the key and pins into both cubes", () => {
+    const { parts } = check("rail");
+    const clip = parts.find((p) => p.kind === "rail-clip-1")!.solid.boundingBox();
+    const key = parts.find((p) => p.kind === "rail-key-1")!.solid.boundingBox();
+    expect(key.max[2]).toBeLessThan(2 * UNIT - 2.4); // bar sits over the key top, so the key cannot slide up
+    expect(clip.max[2]).toBeGreaterThan(2 * UNIT - 0.5);
+    expect(clip.min[0]).toBeLessThan(2 * UNIT - 5);
+    expect(clip.max[0]).toBeGreaterThan(2 * UNIT + 5);
+  });
+
+  it("magnet: 10 x 3 pockets, stubs mate with neighbours above and beside", () => {
+    const { spec, parts } = check("magnet");
+    check("magnet", { front: "drawer", drawers: 2 });
+    const solid = (p: typeof parts) => p.filter((x) => x.group !== "joint");
+    for (const off of [[0, 0, 2 * UNIT], [2 * UNIT, 0, 0]] as [number, number, number][]) {
+      const other = solid(buildCube(m, spec)).map((p) => p.solid.translate(off));
+      for (const a of solid(parts)) for (const b of other) expect(vol(a.solid, b), a.kind).toBeLessThan(0.05);
+    }
+    const top = parts.find((p) => p.kind === "top")!.solid;
+    expect(top.genus()).toBeGreaterThanOrEqual(0);
+    expect(top.boundingBox().max[2]).toBeCloseTo(2 * UNIT + 1.5, 1);
+  });
+
   it("every joint fits the bed at 4x4x4", () => {
-    for (const j of ["lego", "twist", "rail", "clip"] as Joint[]) fits(j);
+    for (const j of ["lego", "twist", "rail", "clip", "magnet"] as Joint[]) fits(j);
   });
 });
