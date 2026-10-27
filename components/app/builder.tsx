@@ -138,7 +138,8 @@ const SIDE_HINT: Record<Side, string> = {
   drawer: "sliding drawers with a front plate and pull",
 };
 
-function Controls({ spec, set, exploded, setExploded, open, setOpen, onFitTest, ready }: {
+function Controls({ spec, set, exploded, setExploded, open, setOpen, onFitTest, ready, fitView, setFitView }: {
+  fitView: boolean; setFitView: (v: boolean) => void;
   spec: CubeSpec; set: (p: Partial<CubeSpec>) => void; exploded: boolean; setExploded: (v: boolean) => void;
   open: boolean; setOpen: (v: boolean) => void; onFitTest: () => void; ready: boolean;
 }) {
@@ -222,6 +223,7 @@ function Controls({ spec, set, exploded, setExploded, open, setOpen, onFitTest, 
           onChange={(v) => set({ clearance: Number(v) })}
         />
         <SwitchField id="explode" label="Explode view" hint="Pull the panels apart in the preview to see the joints." checked={exploded} onChange={setExploded} />
+        <SwitchField id="fitview" label="Preview fit test" hint="Show the actual fit-test pieces for your joint (1-unit decks, side walls and joint parts) instead of the full cube. The clearance tile prints alongside." checked={fitView} onChange={setFitView} />
         <Button variant="outline" disabled={!ready} onClick={onFitTest}>
           <Printer data-icon="inline-start" />
           Fit test print
@@ -249,7 +251,8 @@ export function Builder() {
     /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
 
-  const panels = useMemo(() => (m ? buildCube(m, spec) : []), [m, spec]);
+  const [fitView, setFitView] = useState(false);
+  const panels = useMemo(() => (m ? (fitView ? buildJointFit(m, spec) : buildCube(m, spec)) : []), [m, spec, fitView]);
   const parts = useMemo(() => previewParts(panels, open), [panels, open]);
   const set = (patch: Partial<CubeSpec>) => setSpec((s) => normalize({ ...s, ...patch }));
   const stem = `acmie-brick-${spec.w}x${spec.d}x${spec.h}`;
@@ -257,8 +260,10 @@ export function Builder() {
 
   const download = (kind: "3mf" | "stl") => {
     if (!m) return;
-    if (kind === "3mf") save(meshTo3mf(printParts(panels), A1_BED, "Brick cube"), `${stem}.3mf`, "model/3mf");
-    else saveStls(printParts(panels), stem);
+    // Download is always the full cube, even while the fit-test preview is on.
+    const full = fitView && m ? buildCube(m, spec) : panels;
+    if (kind === "3mf") save(meshTo3mf(printParts(full), A1_BED, "Brick cube"), `${stem}.3mf`, "model/3mf");
+    else saveStls(printParts(full), stem);
     show(`${stem} ${kind.toUpperCase()} downloaded`);
   };
   const fitTest = () => {
@@ -295,7 +300,7 @@ export function Builder() {
         <SidebarContent className="px-2 pt-1 pb-4">
           <div className="motion-stagger flex shrink-0 flex-col gap-3">
             <BrickPresetsCard spec={spec} onChange={setSpec} />
-            <Controls spec={spec} set={set} exploded={exploded} setExploded={setExploded} open={open} setOpen={setOpen} onFitTest={fitTest} ready={ready} />
+            <Controls spec={spec} set={set} exploded={exploded} setExploded={setExploded} open={open} setOpen={setOpen} onFitTest={fitTest} ready={ready} fitView={fitView} setFitView={setFitView} />
           </div>
           <div className="motion-rise mt-3 flex-none [--motion-i:4]">
             <HorrorBanner />
