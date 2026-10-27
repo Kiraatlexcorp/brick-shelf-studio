@@ -82,14 +82,16 @@ function Choice<T extends string>({ label, hint, value, options, onChange }: {
 
 const JOINT_OPTIONS: { value: Joint; label: string }[] = [
   { value: "lego", label: "Lego" },
-  { value: "twist", label: "Acmie Lock" },
-  { value: "rail", label: "Slide rail" },
-  { value: "clip", label: "Clip key" },
+  { value: "twist", label: "Acmie" },
+  { value: "rail", label: "Rail" },
+  { value: "clip", label: "Clip" },
+  { value: "magnet", label: "Magnet" },
 ];
 const JOINT_HINT: Record<Joint, string> = {
   lego: "Studs on top, sockets underneath, dovetail rails between neighbours.",
-  twist: "Acmie Lock: printed corner nodes with two bayonet lugs. Push in, turn 90° to lock.",
-  rail: "Double-T keys slide down T-slots on both sides; a bump clicks into a dimple at the bottom.",
+  twist: "Acmie Lock: printed bayonet nodes with two lugs, at the corners for stacking and mid-wall side by side. Push in, turn 90° to lock. Walls go to 6 mm.",
+  rail: "Double-T keys slide down T-slots from the top; a clip staple snaps over the slot and pins into both cubes.",
+  magnet: "10 × 3 mm disc magnets glued into pockets, plus small stubs that line cubes up. Easy to rearrange, light loads only. Walls go to 6 mm.",
   clip: "Bowtie clips press into pockets across two cubes. Flat faces, no studs.",
 };
 

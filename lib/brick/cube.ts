@@ -4,7 +4,7 @@ import {
   SOCKET_EXTRA, STUD_H, STUD_R, TAB_LEN, UNIT,
   normalize, type CubeSpec, type PartGroup, type SideKey,
 } from "@/lib/brick/spec";
-import { buildJoints } from "@/lib/brick/joints";
+import { buildJoints, stackJoint } from "@/lib/brick/joints";
 import { toPart, type MeshPart } from "@/lib/brick/mesh";
 
 type Vec3 = [number, number, number];
@@ -170,7 +170,7 @@ export function buildCube(m: ManifoldToplevel, input: CubeSpec): Panel[] {
   let bottom = box(0, 0, 0, W, D, DECK);
   const sockets: Manifold[] = [];
   const studs: Manifold[] = [];
-  if (spec.joint === "lego") for (const x of tabCentres(spec.w))
+  if (stackJoint(spec) === "lego") for (const x of tabCentres(spec.w))
     for (const y of tabCentres(spec.d)) {
       sockets.push(M.cylinder(STUD_H + SOCKET_EXTRA, STUD_R + SOCKET_EXTRA, STUD_R + SOCKET_EXTRA, SEG).translate([x, y, -0.01]));
       studs.push(M.cylinder(STUD_H, STUD_R, STUD_R, SEG).translate([x, y, H - 0.01]));
@@ -252,6 +252,11 @@ export function buildCube(m: ManifoldToplevel, input: CubeSpec): Panel[] {
     top = top.subtract(jc);
     for (const p of panels) p.solid = p.solid.subtract(jc);
   }
+  const ja = joints.adds;
+  if (ja?.top.length) top = top.add(M.union(ja.top));
+  if (ja?.bottom.length) bottom = bottom.add(M.union(ja.bottom));
+  const right = panels.find((p) => p.kind === "right");
+  if (ja?.right.length && right) right.solid = right.solid.add(M.union(ja.right));
   panels.unshift(
     { kind: "top", group: "deck", solid: top, flat: [0, 0, 0], out: [0, 0, 1] },
     { kind: "bottom", group: "deck", solid: bottom, flat: [0, 0, 0], out: [0, 0, -1] },

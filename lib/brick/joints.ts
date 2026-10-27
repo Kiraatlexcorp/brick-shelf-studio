@@ -1,5 +1,5 @@
 import type { Manifold, ManifoldToplevel } from "manifold-3d";
-import { UNIT, type CubeSpec, type PartGroup } from "@/lib/brick/spec";
+import { DECK, UNIT, type CubeSpec, type Joint, type PartGroup } from "@/lib/brick/spec";
 
 type Vec3 = [number, number, number];
 export type JointPart = { kind: string; group: PartGroup; solid: Manifold; flat: Vec3; out: Vec3 };
@@ -8,12 +8,18 @@ export type JointGeometry = {
   cuts: Manifold[];
   /** Loose printed parts (nodes, keys, clips), shown locked into this cube's top or right side. */
   parts: JointPart[];
+  /** Solid added after the cuts: alignment studs on the top deck and the right wall. */
+  adds?: { top: Manifold[]; bottom: Manifold[]; right: Manifold[] };
 };
 
 /** Acmie Lock twist node: bayonet barrel with two lugs per end, 90° turn to lock. */
 export const TWIST = { r: 4.5, lug: 2.5, lugW: 3, lugH: 2, depth: 5, lugZ: 2 };
 /** Rail T-slot: narrow neck at the face, wider head inside. */
 export const RAIL = { neckW: 4, neckD: 1, headW: 7, headD: 1.4, bump: 0.7 };
+/** Rail clip staple: bar over the slot mouth, a pin into each top deck. */
+export const RAIL_CLIP = { pinR: 1.5, barW: 4, barT: 2.4, barL: 9 };
+/** Magnet grid: 10 x 3 mm disc pockets plus a light alignment stub. */
+export const MAG = { r: 5, depth: 3.2, stubR: 2, stubH: 1.5 };
 /** Bowtie clip: waist at the seam, wide ends, pocket depth. */
 export const CLIP = { waist: 6, end: 10, half: 5, depth: 2.4 };
 
@@ -95,6 +101,10 @@ function bowtie(m: ManifoldToplevel, t: number, grow: number, half: boolean): Ma
   return right.add(side(-1));
 }
 
+/** Which system joins this cube to the one above (stack) and beside it (side). */
+export const stackJoint = (s: CubeSpec): Joint => s.joint;
+export const sideJoint = (s: CubeSpec): Joint => s.joint;
+
 export function buildJoints(m: ManifoldToplevel, spec: CubeSpec): JointGeometry {
   const { Manifold: M } = m;
   const W = spec.w * UNIT;
@@ -103,8 +113,10 @@ export function buildJoints(m: ManifoldToplevel, spec: CubeSpec): JointGeometry 
   const c = spec.clearance;
   const cuts: Manifold[] = [];
   const parts: JointPart[] = [];
+  const stack = stackJoint(spec);
+  const side = sideJoint(spec);
 
-  if (spec.joint === "twist") {
+  if (stack === "twist") {
     const sock = twistSocket(m, c);
     const corners: [number, number][] = [[13, 13], [W - 13, 13], [13, D - 13], [W - 13, D - 13]];
     corners.forEach(([x, y], i) => {
@@ -115,16 +127,37 @@ export function buildJoints(m: ManifoldToplevel, spec: CubeSpec): JointGeometry 
     });
   }
 
-  if (spec.joint === "rail") {
+  if (side === "twist") {
+    // Same bayonet, axis along x, one per side wall at mid height; node half in the next cube.
+    const toX = (s: Manifold) => s.rotate([0, -90, 0]);
+    const sock = toX(twistSocket(m, c));
+    const y = D / 2, z = H / 2;
+    cuts.push(sock.translate([0, y, z]));
+    cuts.push(sock.mirror([1, 0, 0]).translate([W, y, z]));
+    parts.push({ kind: "node-side", group: "joint", solid: toX(twistNode(m, c / 2).rotate([0, 0, 90])).mirror([1, 0, 0]).translate([W, y, z]), flat: [0, 90, 0], out: [1, 0, 0] });
+  }
+
+  if (side === "rail") {
     const ys = Array.from({ length: spec.d }, (_, j) => j * UNIT + 30);
+    const { pinR, barW, barT, barL } = RAIL_CLIP;
     for (const y of ys) {
       cuts.push(tSlot(m, 1, H + 0.01, c).translate([0, y, 0])); // left face, mouth at x = 0
       cuts.push(tSlot(m, 1, H + 0.01, c).mirror([1, 0, 0]).translate([W, y, 0]));
+      // Clip lock: a staple drops into a recess over the slot mouth and pins into both top decks.
+      for (const [x0, s] of [[0, 1], [W, -1]] as const) {
+        cuts.push(M.cube([barL + c, barW + 2 * c, barT + 0.01]).translate([s > 0 ? x0 - 0.01 : x0 - barL - c + 0.01, y - barW / 2 - c, H - barT]));
+        cuts.push(M.cylinder(4.5, pinR + c, pinR + c, 20).translate([x0 + s * (barL - 2), y, H - barT - 4]));
+      }
     }
-    ys.forEach((y, i) =>
-      parts.push({ kind: `rail-key-${i + 1}`, group: "joint", solid: railKey(m, 1 + c, H, c).mirror([1, 0, 0]).translate([W, y, 0]), flat: [0, 90, 0], out: [1, 0, 0] }),
-    );
-    // Stacking: the same T-slot front to back in the top and bottom decks.
+    ys.forEach((y, i) => {
+      parts.push({ kind: `rail-key-${i + 1}`, group: "joint", solid: railKey(m, 1 + c, H - RAIL_CLIP.barT - c, c).mirror([1, 0, 0]).translate([W, y, 0]), flat: [0, 90, 0], out: [1, 0, 0] });
+      const bar = M.cube([2 * barL - 2 * c, barW, barT - c]).translate([W - barL + c, y - barW / 2, H - barT]);
+      const pins = [W - barL + 2, W + barL - 2].map((x) => M.cylinder(4, pinR, pinR, 20).translate([x, y, H - barT - 4 + 0.3]));
+      parts.push({ kind: `rail-clip-${i + 1}`, group: "joint", solid: M.union([bar, ...pins]), flat: [180, 0, 0], out: [0, 0, 1] });
+    });
+  }
+
+  if (stack === "rail") {
     const xs = Array.from({ length: spec.w }, (_, i) => i * UNIT + UNIT / 2);
     for (const x of xs) {
       // slot depth -> z, width -> x, run -> +y (open at the front, closed 1 mm short of the back)
@@ -140,10 +173,10 @@ export function buildJoints(m: ManifoldToplevel, spec: CubeSpec): JointGeometry 
     );
   }
 
-  if (spec.joint === "clip") {
-    const t = CLIP.depth;
-    const pocket = bowtie(m, t + 0.01, c, true);
-    const key = bowtie(m, t - c, 0, false);
+  const t = CLIP.depth;
+  const pocket = bowtie(m, t + 0.01, c, true);
+  const key = bowtie(m, t - c, 0, false);
+  if (side === "clip") {
     // Side by side: top face of the top deck and bottom face of the bottom deck, at x = 0 and x = W.
     between(spec.d).forEach((y, i) => {
       for (const [z, up] of [[H - t, true], [0, false]] as const) {
@@ -153,6 +186,8 @@ export function buildJoints(m: ManifoldToplevel, spec: CubeSpec): JointGeometry 
       }
       parts.push({ kind: `clip-side-${i + 1}`, group: "joint", solid: key.translate([W, y, H - t + 0.005]), flat: [0, 0, 0], out: [1, 0, 0] });
     });
+  }
+  if (stack === "clip") {
     // Stacking: front and back faces, half in the top deck here, half in the next cube's bottom deck.
     // u (seam outward) -> -z, thickness -> +y into the cube, v -> x
     const facePocket = pocket.rotate([0, 90, 0]).rotate([0, 0, 90]);
@@ -167,5 +202,31 @@ export function buildJoints(m: ManifoldToplevel, spec: CubeSpec): JointGeometry 
       parts.push({ kind: `clip-back-${i + 1}`, group: "joint", solid: k.mirror([0, 1, 0]).translate([x, D - 0.005, H]), flat: [90, 0, 0], out: [0, 1, 0] });
     });
   }
-  return { cuts, parts };
+
+  const { r: mr, depth: md, stubR, stubH } = MAG;
+  const mag = M.cylinder(md + 0.01, mr + c / 2, mr + c / 2, 40);
+  const stub = M.cylinder(stubH, stubR, stubR * 0.6, 24);
+  const stubHole = M.cylinder(stubH + 0.3 + 0.01, stubR + c, stubR + c, 24);
+  const adds: { top: Manifold[]; bottom: Manifold[]; right: Manifold[] } = { top: [], bottom: [], right: [] };
+  if (stack === "magnet") {
+    for (const [x, y] of [[13, 13], [W - 13, 13], [13, D - 13], [W - 13, D - 13]]) {
+      cuts.push(mag.translate([x, y, H - md]));
+      cuts.push(mag.translate([x, y, -0.01]));
+    }
+    adds.top.push(stub.translate([W / 2, D / 2 + 6, H - 0.01]));
+    cuts.push(stubHole.translate([W / 2, D / 2 + 6, -0.01]));
+  }
+  if (side === "magnet") {
+    const z = DECK + 9;
+    const toX = (s: Manifold) => s.rotate([0, 90, 0]); // +z -> +x
+    const ys = Array.from({ length: spec.d }, (_, j) => j * UNIT + UNIT / 2);
+    for (const y of ys) {
+      cuts.push(toX(mag).translate([-0.01, y, z]));
+      cuts.push(toX(mag).mirror([1, 0, 0]).translate([W + 0.01, y, z]));
+    }
+    const sy = UNIT / 2 + 11, sz = H / 2 + 4;
+    adds.right.push(toX(stub).translate([W - 0.01, sy, sz]));
+    cuts.push(toX(stubHole).translate([-0.01, sy, sz]));
+  }
+  return { cuts, parts, adds };
 }

@@ -33,8 +33,8 @@ export const MAGNET = { r: 2.1, depth: 2.2 };
 export const GROOVE = { depth: 1.8, height: 6, lip: 0.8, lipLen: 3 };
 
 /** How cubes join each other: stacking (top/bottom) and side by side. */
-export type Joint = "lego" | "twist" | "rail" | "clip";
-export const JOINTS: Joint[] = ["lego", "twist", "rail", "clip"];
+export type Joint = "lego" | "twist" | "rail" | "clip" | "magnet";
+export const JOINTS: Joint[] = ["lego", "twist", "rail", "clip", "magnet"];
 
 export type Side = "wall" | "open" | "door" | "drawer" | "slide";
 export type Hinge = "left" | "right" | "top" | "bottom";
@@ -120,5 +120,9 @@ export function normalize(spec: CubeSpec): CubeSpec {
   if (s.joint !== "lego") s.dovetail = false;
   // T-slots on the outer face need room next to the drawer grooves.
   if (s.joint === "rail" && s.wall < 5) s.wall = 5;
+  // Side bayonets sink 5 mm into the wall; with drawers the grooves sit right behind them.
+  if (s.joint === "twist") s.wall = Math.max(s.wall, s.front === "drawer" ? 8 : 6);
+  // 3.2 mm magnet pockets in the side walls.
+  if (s.joint === "magnet" && s.wall < 6) s.wall = 6;
   return s;
 }
