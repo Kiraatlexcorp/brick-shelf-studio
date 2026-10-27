@@ -90,6 +90,7 @@ const SECTION_ICONS: Record<string, LucideIcon> = {
   lid: PanelTop,
   drawer: Ruler,
   elements: Shapes,
+  canvas: Grid3x3,
 };
 
 /**

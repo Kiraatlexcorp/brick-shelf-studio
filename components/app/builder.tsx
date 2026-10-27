@@ -9,6 +9,15 @@ import { Download, Expand, Minimize2, Moon, Printer, SlidersHorizontal, Sun } fr
 import { loadManifold } from "@/lib/geometry/manifold";
 import { buildCube, buildFitTile, buildJointFit, previewParts, printParts } from "@/lib/brick/cube";
 import { A1_BED, CLEARANCES, DEFAULT_CUBE, UNIT, WALLS, normalize, type BaseJoint, type CubeSpec, type Hinge, type Joint, type Latch, type Side } from "@/lib/brick/spec";
+import {
+  addCube,
+  layoutBounds,
+  layoutPrintParts,
+  layoutSizeMm,
+  moveCube,
+  removeCube,
+  type Layout,
+} from "@/lib/brick/layout";
 import { capacity, suggest } from "@/lib/brick/strength";
 import type { MeshPart } from "@/lib/brick/mesh";
 import { meshTo3mf } from "@/lib/export/threemf";
@@ -234,9 +243,147 @@ function Controls({ spec, set, exploded, setExploded, open, setOpen, onFitTest, 
   );
 }
 
+function CanvasCard({
+  layout,
+  onAddCube,
+  onMoveCube,
+  onRemoveCube,
+  onLoadCube,
+  onDownloadAll,
+  ready,
+}: {
+  layout: Layout;
+  onAddCube: () => void;
+  onMoveCube: (id: string, dx: number, dz: number) => void;
+  onRemoveCube: (id: string) => void;
+  onLoadCube: (spec: CubeSpec) => void;
+  onDownloadAll: () => void;
+  ready: boolean;
+}) {
+  const size = layoutSizeMm(layout);
+
+  return (
+    <SectionCard id="canvas" title="Canvas">
+      <div className="flex flex-col gap-2.5">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="w-full justify-center"
+          onClick={onAddCube}
+        >
+          Add this cube
+        </Button>
+
+        <div className="flex items-center justify-between text-xs text-muted-foreground border-y py-1.5">
+          <span>Overall size:</span>
+          <span className="font-heading font-medium text-foreground tabular-nums">
+            {size.w} × {size.d} × {size.h} mm
+          </span>
+        </div>
+
+        {layout.cubes.length === 0 ? (
+          <p className="text-xs text-muted-foreground py-1">
+            No cubes placed yet. Click &quot;Add this cube&quot; to build a layout.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-2 max-h-60 overflow-y-auto pr-0.5">
+            {layout.cubes.map((cube, index) => (
+              <div
+                key={cube.id}
+                className="flex flex-col gap-1.5 rounded-lg border bg-muted/20 p-2 text-xs"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">
+                    Cube {index + 1}: {cube.spec.w}×{cube.spec.d}×{cube.spec.h}u
+                  </span>
+                  <span className="font-mono text-[11px] text-muted-foreground">
+                    col {cube.x}, row {cube.z}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-1 pt-0.5">
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon-xs"
+                      aria-label={`Move cube ${index + 1} left`}
+                      onClick={() => onMoveCube(cube.id, -1, 0)}
+                    >
+                      ←
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon-xs"
+                      aria-label={`Move cube ${index + 1} right`}
+                      onClick={() => onMoveCube(cube.id, 1, 0)}
+                    >
+                      →
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon-xs"
+                      aria-label={`Move cube ${index + 1} up`}
+                      onClick={() => onMoveCube(cube.id, 0, 1)}
+                    >
+                      ↑
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon-xs"
+                      aria-label={`Move cube ${index + 1} down`}
+                      onClick={() => onMoveCube(cube.id, 0, -1)}
+                    >
+                      ↓
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="xs"
+                      onClick={() => onLoadCube(cube.spec)}
+                    >
+                      Load into editor
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="xs"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => onRemoveCube(cube.id)}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <Button
+          type="button"
+          size="sm"
+          className="w-full justify-center"
+          disabled={!ready || layout.cubes.length === 0}
+          onClick={onDownloadAll}
+        >
+          <Download data-icon="inline-start" />
+          Download all (3mf)
+        </Button>
+      </div>
+    </SectionCard>
+  );
+}
+
 export function Builder() {
   const [m, setM] = useState<ManifoldToplevel | null>(null);
   const [spec, setSpec] = useState<CubeSpec>(DEFAULT_CUBE);
+  const [layout, setLayout] = useState<Layout>({ cubes: [] });
   const [exploded, setExploded] = useState(false);
   const [open, setOpen] = useState(false);
   const { toast, show } = useToast();
@@ -274,6 +421,11 @@ export function Builder() {
     save(meshTo3mf(parts, A1_BED, "Fit test"), `acmie-brick-fit-${spec.joint}.3mf`, "model/3mf");
     show("Fit test downloaded");
   };
+  const downloadAll = () => {
+    if (!m || layout.cubes.length === 0) return;
+    save(meshTo3mf(layoutPrintParts(m, layout), A1_BED, "Brick shelf layout"), "acmie-brick-layout.3mf", "model/3mf");
+    show("Layout 3MF downloaded");
+  };
 
   function toggleTheme() {
     const next = !document.documentElement.classList.contains("dark");
@@ -301,6 +453,24 @@ export function Builder() {
         <SidebarContent className="px-2 pt-1 pb-4">
           <div className="motion-stagger flex shrink-0 flex-col gap-3">
             <BrickPresetsCard spec={spec} onChange={setSpec} />
+            <CanvasCard
+              layout={layout}
+              onAddCube={() => {
+                setLayout((l) => addCube(l, spec));
+                show("Cube added to canvas");
+              }}
+              onMoveCube={(id, dx, dz) => setLayout((l) => moveCube(l, id, dx, dz))}
+              onRemoveCube={(id) => {
+                setLayout((l) => removeCube(l, id));
+                show("Cube removed from canvas");
+              }}
+              onLoadCube={(s) => {
+                setSpec(s);
+                show("Loaded cube into editor");
+              }}
+              onDownloadAll={downloadAll}
+              ready={ready}
+            />
             <Controls spec={spec} set={set} exploded={exploded} setExploded={setExploded} open={open} setOpen={setOpen} onFitTest={fitTest} ready={ready} fitView={fitView} setFitView={setFitView} />
           </div>
           <div className="motion-rise mt-3 flex-none [--motion-i:4]">
