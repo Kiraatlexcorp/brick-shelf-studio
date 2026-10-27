@@ -436,3 +436,15 @@ export function buildFitTile(m: ManifoldToplevel): MeshPart[] {
   const key = M.cube([30, 14, 8]).add(M.cylinder(TAB_LEN, PEG_R, PEG_R, 32).rotate([-90, 0, 0]).translate([15, 14, 4]));
   return [toPart("fit-deck", deck), toPart("fit-key", key)];
 }
+
+/** Groups and kinds kept in a joint fit test: decks, side walls and the joint hardware. */
+const FIT_KEEP = new Set(["top", "bottom", "left", "right"]);
+
+/**
+ * Joint fit test: a 1×1×1 cube with only the parts the current joint touches,
+ * so you can test-print the joint (and wall hook/rail) before a full cube.
+ */
+export function buildJointFit(m: ManifoldToplevel, spec: CubeSpec): Panel[] {
+  const s = normalize({ ...spec, w: 1, d: 1, h: 1, front: "open", left: "wall", right: "wall", back: spec.wallMount ? "wall" : "open", gussets: false });
+  return buildCube(m, s).filter((p) => FIT_KEEP.has(p.kind) || p.group === "joint" || (s.wallMount && p.kind === "back"));
+}

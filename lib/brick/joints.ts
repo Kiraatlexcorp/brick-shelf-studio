@@ -119,8 +119,8 @@ export function buildJoints(m: ManifoldToplevel, spec: CubeSpec): JointGeometry 
   if (stack === "twist") {
     const sock = twistSocket(m, c);
     // Back nodes move forward when rail staples sit at the back of the side walls (mixed mode).
-    const yb = side === "rail" ? D - 24 : D - 13;
-    const corners: [number, number][] = [[13, 13], [W - 13, 13], [13, yb], [W - 13, yb]];
+    const yb = side !== "rail" ? D - 13 : spec.d > 1 ? D - 24 : 13;
+    const corners: [number, number][] = yb === 13 ? [[13, 13], [W - 13, 13]] : [[13, 13], [W - 13, 13], [13, yb], [W - 13, yb]];
     corners.forEach(([x, y], i) => {
       cuts.push(sock.translate([x, y, H]));
       cuts.push(sock.mirror([0, 0, 1]).translate([x, y, 0]));

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import Module from "manifold-3d";
-import { buildCube, printParts } from "@/lib/brick/cube";
+import { buildCube, buildJointFit, printParts } from "@/lib/brick/cube";
 import { boundsOf } from "@/lib/export/threemf";
 import { A1_BED, DEFAULT_CUBE, normalize, UNIT, type CubeSpec, type Joint } from "@/lib/brick/spec";
 
@@ -104,6 +104,26 @@ describe("joints", () => {
       expect(spec.dovetail).toBe(side === "lego");
     }
     fits("mixed");
+  });
+
+  it("joint fit test: 1-unit print for every joint, joint parts included, fits the bed", () => {
+    const specs: Partial<CubeSpec>[] = [
+      ...(["lego", "twist", "rail", "clip", "magnet"] as Joint[]).map((joint) => ({ joint })),
+      { joint: "mixed", stack: "twist", side: "rail" },
+      { joint: "mixed", stack: "magnet", side: "clip" },
+      { joint: "lego", wallMount: true },
+    ];
+    for (const extra of specs) {
+      const panels = buildJointFit(m, { ...DEFAULT_CUBE, ...extra });
+      for (let i = 0; i < panels.length; i++)
+        for (let j = i + 1; j < panels.length; j++) expect(vol(panels[i].solid, panels[j].solid), `${panels[i].kind} vs ${panels[j].kind}`).toBeLessThan(0.05);
+      if (extra.joint !== "lego" && extra.joint !== "magnet") expect(panels.some((p) => p.group === "joint"), JSON.stringify(extra)).toBe(true);
+      if (extra.wallMount) expect(panels.some((p) => p.kind === "wall-rail")).toBe(true);
+      for (const part of printParts(panels)) {
+        const b = boundsOf(part);
+        for (const v of [b.maxX - b.minX, b.maxY - b.minY]) expect(v).toBeLessThanOrEqual(A1_BED);
+      }
+    }
   });
 
   it("wall mode: hook bolts to the back, bevel drops behind the rail, cube floats", () => {

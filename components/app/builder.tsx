@@ -7,7 +7,7 @@ import { zipSync } from "fflate";
 import type { ManifoldToplevel } from "manifold-3d";
 import { Download, Expand, Minimize2, Moon, Printer, SlidersHorizontal, Sun } from "lucide-react";
 import { loadManifold } from "@/lib/geometry/manifold";
-import { buildCube, buildFitTile, previewParts, printParts } from "@/lib/brick/cube";
+import { buildCube, buildFitTile, buildJointFit, previewParts, printParts } from "@/lib/brick/cube";
 import { A1_BED, CLEARANCES, DEFAULT_CUBE, UNIT, WALLS, normalize, type BaseJoint, type CubeSpec, type Hinge, type Joint, type Latch, type Side } from "@/lib/brick/spec";
 import { capacity, suggest } from "@/lib/brick/strength";
 import type { MeshPart } from "@/lib/brick/mesh";
@@ -260,7 +260,9 @@ export function Builder() {
   };
   const fitTest = () => {
     if (!m) return;
-    save(meshTo3mf(buildFitTile(m), A1_BED, "Fit tile"), "acmie-brick-fit-tile.3mf", "model/3mf");
+    // Clearance tile plus a 1-unit test of the chosen joint, on one plate.
+    const parts = [...buildFitTile(m), ...printParts(buildJointFit(m, spec)).map((p) => ({ ...p, name: `fit-${p.name}` }))];
+    save(meshTo3mf(parts, A1_BED, "Fit test"), `acmie-brick-fit-${spec.joint}.3mf`, "model/3mf");
     show("Fit test downloaded");
   };
 
@@ -387,7 +389,7 @@ function MobileBar({ disabled, on3mf, onStl, onFit }: { disabled: boolean; on3mf
   const items: [string, string, () => void][] = [
     ["3MF", "Panels laid flat, for Bambu Studio", on3mf],
     ["STL", "One file per panel, any slicer", onStl],
-    ["Fit test print", "Print first, pick a clearance", onFit],
+    ["Fit test print", "Clearance tile + your joint, print first", onFit],
   ];
   return (
     <>
