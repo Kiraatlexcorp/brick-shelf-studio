@@ -126,6 +126,20 @@ describe("joints", () => {
     }
   });
 
+  it("open sides get no side joint features", () => {
+    for (const joint of ["twist", "rail", "clip", "magnet"] as Joint[]) {
+      const both = buildCube(m, { ...DEFAULT_CUBE, joint, left: "open", right: "open" });
+      const sideParts = both.filter((p) => p.group === "joint" && /side|rail-|clip-side/.test(p.kind));
+      expect(sideParts.map((p) => p.kind), joint).toEqual([]);
+      // decks keep their full volume at the open edges
+      if (joint === "clip" || joint === "rail") {
+        const open = buildCube(m, { ...DEFAULT_CUBE, joint, left: "open", right: "open" }).find((p) => p.kind === "top")!.solid.volume();
+        const walled = buildCube(m, { ...DEFAULT_CUBE, joint }).find((p) => p.kind === "top")!.solid.volume();
+        expect(open).toBeGreaterThan(walled);
+      }
+    }
+  });
+
   it("wall mode: hook bolts to the back, bevel drops behind the rail, cube floats", () => {
     for (const h of [1, 2, 4]) {
       const { parts } = check("lego", { wallMount: true, h });

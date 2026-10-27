@@ -115,6 +115,12 @@ export function buildJoints(m: ManifoldToplevel, spec: CubeSpec): JointGeometry 
   const parts: JointPart[] = [];
   const stack = stackJoint(spec);
   const side = sideJoint(spec);
+  // Side joint features only on walls; an Open (or door) side gets none.
+  const L = spec.left === "wall", Rt = spec.right === "wall";
+  /** Keep a cut on the left (x = 0) or right (x = W) face only when that side is a wall. */
+  const onL = (x: Manifold) => { if (L) cuts.push(x); };
+  const onR = (x: Manifold) => { if (Rt) cuts.push(x); };
+  const partR = (p: JointPart) => { if (Rt) parts.push(p); };
 
   if (stack === "twist") {
     const sock = twistSocket(m, c);
@@ -134,28 +140,29 @@ export function buildJoints(m: ManifoldToplevel, spec: CubeSpec): JointGeometry 
     const toX = (s: Manifold) => s.rotate([0, -90, 0]);
     const sock = toX(twistSocket(m, c));
     const y = D / 2, z = H / 2;
-    cuts.push(sock.translate([0, y, z]));
-    cuts.push(sock.mirror([1, 0, 0]).translate([W, y, z]));
-    parts.push({ kind: "node-side", group: "joint", solid: toX(twistNode(m, c / 2).rotate([0, 0, 90])).mirror([1, 0, 0]).translate([W, y, z]), flat: [0, 90, 0], out: [1, 0, 0] });
+    onL(sock.translate([0, y, z]));
+    onR(sock.mirror([1, 0, 0]).translate([W, y, z]));
+    partR({ kind: "node-side", group: "joint", solid: toX(twistNode(m, c / 2).rotate([0, 0, 90])).mirror([1, 0, 0]).translate([W, y, z]), flat: [0, 90, 0], out: [1, 0, 0] });
   }
 
   if (side === "rail") {
     const ys = Array.from({ length: spec.d }, (_, j) => j * UNIT + 30);
     const { pinR, barW, barT, barL } = RAIL_CLIP;
     for (const y of ys) {
-      cuts.push(tSlot(m, 1, H + 0.01, c).translate([0, y, 0])); // left face, mouth at x = 0
-      cuts.push(tSlot(m, 1, H + 0.01, c).mirror([1, 0, 0]).translate([W, y, 0]));
+      onL(tSlot(m, 1, H + 0.01, c).translate([0, y, 0])); // left face, mouth at x = 0
+      onR(tSlot(m, 1, H + 0.01, c).mirror([1, 0, 0]).translate([W, y, 0]));
       // Clip lock: a staple drops into a recess over the slot mouth and pins into both top decks.
       for (const [x0, s] of [[0, 1], [W, -1]] as const) {
-        cuts.push(M.cube([barL + c, barW + 2 * c, barT + 0.01]).translate([s > 0 ? x0 - 0.01 : x0 - barL - c + 0.01, y - barW / 2 - c, H - barT]));
-        cuts.push(M.cylinder(4.5, pinR + c, pinR + c, 20).translate([x0 + s * (barL - 2), y, H - barT - 4]));
+        const put = s > 0 ? onL : onR;
+        put(M.cube([barL + c, barW + 2 * c, barT + 0.01]).translate([s > 0 ? x0 - 0.01 : x0 - barL - c + 0.01, y - barW / 2 - c, H - barT]));
+        put(M.cylinder(4.5, pinR + c, pinR + c, 20).translate([x0 + s * (barL - 2), y, H - barT - 4]));
       }
     }
     ys.forEach((y, i) => {
-      parts.push({ kind: `rail-key-${i + 1}`, group: "joint", solid: railKey(m, 1 + c, H - RAIL_CLIP.barT - c, c).mirror([1, 0, 0]).translate([W, y, 0]), flat: [0, 90, 0], out: [1, 0, 0] });
+      partR({ kind: `rail-key-${i + 1}`, group: "joint", solid: railKey(m, 1 + c, H - RAIL_CLIP.barT - c, c).mirror([1, 0, 0]).translate([W, y, 0]), flat: [0, 90, 0], out: [1, 0, 0] });
       const bar = M.cube([2 * barL - 2 * c, barW, barT - c]).translate([W - barL + c, y - barW / 2, H - barT]);
       const pins = [W - barL + 2, W + barL - 2].map((x) => M.cylinder(4, pinR, pinR, 20).translate([x, y, H - barT - 4 + 0.3]));
-      parts.push({ kind: `rail-clip-${i + 1}`, group: "joint", solid: M.union([bar, ...pins]), flat: [180, 0, 0], out: [0, 0, 1] });
+      partR({ kind: `rail-clip-${i + 1}`, group: "joint", solid: M.union([bar, ...pins]), flat: [180, 0, 0], out: [0, 0, 1] });
     });
   }
 
@@ -183,10 +190,10 @@ export function buildJoints(m: ManifoldToplevel, spec: CubeSpec): JointGeometry 
     between(spec.d).forEach((y, i) => {
       for (const [z, up] of [[H - t, true], [0, false]] as const) {
         const p = up ? pocket : pocket.mirror([0, 0, 1]).translate([0, 0, t]);
-        cuts.push(p.translate([0, y, z - (up ? 0 : 0.01)]));
-        cuts.push(p.mirror([1, 0, 0]).translate([W, y, z - (up ? 0 : 0.01)]));
+        onL(p.translate([0, y, z - (up ? 0 : 0.01)]));
+        onR(p.mirror([1, 0, 0]).translate([W, y, z - (up ? 0 : 0.01)]));
       }
-      parts.push({ kind: `clip-side-${i + 1}`, group: "joint", solid: key.translate([W, y, H - t + 0.005]), flat: [0, 0, 0], out: [1, 0, 0] });
+      partR({ kind: `clip-side-${i + 1}`, group: "joint", solid: key.translate([W, y, H - t + 0.005]), flat: [0, 0, 0], out: [1, 0, 0] });
     });
   }
   if (stack === "clip") {
@@ -223,12 +230,12 @@ export function buildJoints(m: ManifoldToplevel, spec: CubeSpec): JointGeometry 
     const toX = (s: Manifold) => s.rotate([0, 90, 0]); // +z -> +x
     const ys = Array.from({ length: spec.d }, (_, j) => j * UNIT + UNIT / 2);
     for (const y of ys) {
-      cuts.push(toX(mag).translate([-0.01, y, z]));
-      cuts.push(toX(mag).mirror([1, 0, 0]).translate([W + 0.01, y, z]));
+      onL(toX(mag).translate([-0.01, y, z]));
+      onR(toX(mag).mirror([1, 0, 0]).translate([W + 0.01, y, z]));
     }
     const sy = UNIT / 2 + 11, sz = H / 2 + 4;
-    adds.right.push(toX(stub).translate([W - 0.01, sy, sz]));
-    cuts.push(toX(stubHole).translate([-0.01, sy, sz]));
+    if (Rt) adds.right.push(toX(stub).translate([W - 0.01, sy, sz]));
+    onL(toX(stubHole).translate([-0.01, sy, sz]));
   }
   return { cuts, parts, adds };
 }
