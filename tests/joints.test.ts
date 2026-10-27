@@ -165,6 +165,18 @@ describe("joints", () => {
     neighbour("mixed", [0, 0, 2 * UNIT], { stack: "rail", side: "lego" });
   });
 
+  it("wall cleat resists pull-out: hook can't slide off forward, only lift off", () => {
+    for (const h of [1, 2, 3]) {
+      const parts = buildCube(m, { ...DEFAULT_CUBE, wallMount: true, h });
+      const hook = parts.find((p) => p.kind === "wall-hook")!.solid;
+      const rail = parts.find((p) => p.kind === "wall-rail")!.solid;
+      // pulled 3 mm straight off the wall, the hook's bevel runs into the rail's bevel
+      expect(hook.translate([0, -3, 0]).intersect(rail).volume(), `h=${h}`).toBeGreaterThan(1);
+      // lifted clear of the bevel (8 mm + clearance) it comes away freely
+      expect(hook.translate([0, -3, 9]).intersect(rail).volume(), `h=${h}`).toBeLessThan(0.05);
+    }
+  });
+
   it("wall mode: hook bolts to the back, bevel drops behind the rail, cube floats", () => {
     for (const h of [1, 2, 4]) {
       const { parts } = check("lego", { wallMount: true, h });

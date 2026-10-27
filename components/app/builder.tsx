@@ -201,7 +201,7 @@ function Controls({ spec, set, exploded, setExploded, open, setOpen, onFitTest, 
           <SwitchField id="solo" label="Single cube" hint="Print clip keys as flush half plugs so nothing sticks out of a cube that stands alone." checked={spec.solo} onChange={(solo) => set({ solo })} />
         ) : null}
         {spec.back === "wall" ? (
-          <SwitchField id="wallmount" label="Wall mode" hint="Floating cube: print the wall rail, screw it to the wall, bolt the hook to the back wall with two M4 bolts, then drop the cube on. Turns bolt holes on." checked={spec.wallMount} onChange={(wallMount) => set({ wallMount })} />
+          <SwitchField id="wallmount" label="Wall mode" hint="Floating cube: print the wall rail, screw it to the wall, bolt the hook to the back wall with two M4 bolts, then drop the cube on. The 45° cleat only resists pulling straight off the wall; it lifts off upward, so keep 10 mm free above the cube. Holding power is a guess and depends on your wall anchors: use anchors rated for at least twice the load. Turns bolt holes on." checked={spec.wallMount} onChange={(wallMount) => set({ wallMount })} />
         ) : null}
       </SectionCard>
       <SectionCard id="strength" title="Strength">
