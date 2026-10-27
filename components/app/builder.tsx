@@ -8,7 +8,7 @@ import type { ManifoldToplevel } from "manifold-3d";
 import { Download, Expand, Minimize2, Moon, Printer, SlidersHorizontal, Sun } from "lucide-react";
 import { loadManifold } from "@/lib/geometry/manifold";
 import { buildCube, buildFitTile, previewParts, printParts } from "@/lib/brick/cube";
-import { A1_BED, CLEARANCES, DEFAULT_CUBE, UNIT, type CubeSpec, type Side } from "@/lib/brick/spec";
+import { A1_BED, CLEARANCES, DEFAULT_CUBE, UNIT, WALLS, normalize, type CubeSpec, type Hinge, type Latch, type Side } from "@/lib/brick/spec";
 import type { MeshPart } from "@/lib/brick/mesh";
 import { meshTo3mf } from "@/lib/export/threemf";
 import { meshToStl } from "@/lib/export/stl";
@@ -21,6 +21,7 @@ import { SectionCard } from "@/components/studio/section-card";
 import { MeasureField, SwitchField } from "@/components/studio/fields";
 import { Toast, useToast } from "@/components/studio/toast";
 import { BrickPresetsCard } from "@/components/brick/presets-card";
+import { BRICK_PRESETS } from "@/components/brick/presets";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Field, FieldLabel } from "@/components/ui/field";
@@ -83,11 +84,26 @@ const SIDES = ["front", "back", "left", "right"] as const;
 const SIDE_OPTIONS: { value: Side; label: string }[] = [
   { value: "wall", label: "Wall" },
   { value: "open", label: "Open" },
+  { value: "door", label: "Door" },
+  { value: "slide", label: "Slide" },
 ];
+const FRONT_OPTIONS: { value: Side; label: string }[] = [...SIDE_OPTIONS, { value: "drawer", label: "Drawer" }];
+const SIDE_HINT: Record<Side, string> = {
+  wall: "a solid panel",
+  open: "nothing, an open shelf",
+  door: "a hinged door on a filament pin",
+  slide: "sliding panels in deck grooves",
+  drawer: "sliding drawers with a front plate and pull",
+};
 
-function Controls({ spec, set, exploded, setExploded, onFitTest, ready }: {
-  spec: CubeSpec; set: (p: Partial<CubeSpec>) => void; exploded: boolean; setExploded: (v: boolean) => void; onFitTest: () => void; ready: boolean;
+function Controls({ spec, set, exploded, setExploded, open, setOpen, onFitTest, ready }: {
+  spec: CubeSpec; set: (p: Partial<CubeSpec>) => void; exploded: boolean; setExploded: (v: boolean) => void;
+  open: boolean; setOpen: (v: boolean) => void; onFitTest: () => void; ready: boolean;
 }) {
+  const sides = SIDES.map((k) => spec[k]);
+  const hasDoor = sides.includes("door");
+  const hasSlide = sides.includes("slide");
+  const hasDrawer = spec.front === "drawer";
   return (
     <>
       <SectionCard id="bin" title="Cube size">
@@ -100,17 +116,49 @@ function Controls({ spec, set, exploded, setExploded, onFitTest, ready }: {
           <Choice
             key={side}
             label={side[0].toUpperCase() + side.slice(1)}
-            hint={`Wall prints a ${side} panel. Open leaves the ${side} side empty.`}
+            hint={`Wall, open, door or sliding panels${side === "front" ? ", or drawers (front only; keeps the side walls for the rails)" : ""}. Now: ${SIDE_HINT[spec[side]]}.`}
             value={spec[side]}
-            options={SIDE_OPTIONS}
+            options={side === "front" ? FRONT_OPTIONS : SIDE_OPTIONS}
             onChange={(v) => set({ [side]: v })}
           />
         ))}
       </SectionCard>
+      {hasDoor || hasSlide || hasDrawer ? (
+        <SectionCard id="fronts" title="Doors and drawers">
+          {hasDoor ? (
+            <>
+              <Choice<Hinge> label="Hinge" hint="Which edge the door swings on. Knuckles sit on the decks; the pin is a 1.75 mm filament offcut." value={spec.hinge}
+                options={[{ value: "left", label: "Left" }, { value: "right", label: "Right" }, { value: "top", label: "Top" }, { value: "bottom", label: "Bottom" }]} onChange={(hinge) => set({ hinge })} />
+              <Choice<Latch> label="Latch" hint="Magnet: 4 × 2 mm disc magnets, glue one in the door and one in the deck edge. Bump: a printed click bump." value={spec.latch}
+                options={[{ value: "magnet", label: "Magnet" }, { value: "bump", label: "Snap bump" }]} onChange={(latch) => set({ latch })} />
+            </>
+          ) : null}
+          {hasDrawer ? (
+            <>
+              <Choice label="Drawers" hint="One full height drawer or two half height drawers (needs 2u tall)." value={String(spec.drawers)}
+                options={[{ value: "1", label: "1 full" }, { value: "2", label: "2 half" }]} onChange={(v) => set({ drawers: Number(v) })} />
+              <MeasureField label="Dividers" hint="Walls inside each drawer, side to side." value={spec.dividers} min={0} max={3} step={1} digits={0} suffix="" onChange={(dividers) => set({ dividers })} />
+            </>
+          ) : null}
+          {hasSlide ? (
+            <Choice label="Sliding panels" hint="One panel covers half the opening; two overlap and slide past each other." value={String(spec.panels)}
+              options={[{ value: "1", label: "1" }, { value: "2", label: "2" }]} onChange={(v) => set({ panels: Number(v) })} />
+          ) : null}
+          <SwitchField id="open" label="Show open" hint="Swing doors open and pull drawers out in the preview." checked={open} onChange={setOpen} />
+        </SectionCard>
+      ) : null}
+      <SectionCard id="strength" title="Strength">
+        <Choice label="Wall" hint="Panel thickness. 5 mm with ribs and gussets is the 10 kg default; 6 mm or more if you use drawers and dovetails." value={String(spec.wall)}
+          options={WALLS.map((w) => ({ value: String(w), label: `${w} mm` }))} onChange={(v) => set({ wall: Number(v) })} />
+        <SwitchField id="dovetail" label="Dovetail joins" hint="Rails on the right wall slide down into grooves on the next cube's left wall." checked={spec.dovetail} onChange={(dovetail) => set({ dovetail })} />
+        <SwitchField id="bolts" label="M4 bolt holes" hint="Corner holes through the decks to bolt stacked cubes, side holes to bolt neighbours, two back holes to screw to a wall." checked={spec.bolts} onChange={(bolts) => set({ bolts })} />
+        <SwitchField id="gussets" label="Corner gussets" hint="Triangles in the back corners stop the cube racking." checked={spec.gussets} onChange={(gussets) => set({ gussets })} />
+        <SwitchField id="ribs" label="Deck ribs" hint="Ribs under the top deck cut sag under load." checked={spec.ribs} onChange={(ribs) => set({ ribs })} />
+      </SectionCard>
       <SectionCard id="drawer" title="Fit">
         <Choice
           label="Clearance"
-          hint="Gap per side between stud and socket. Print the fit test and pick the snuggest slot that still goes in by hand."
+          hint="Gap per side between mating parts. Print the fit test and pick the snuggest hole that still goes in by hand."
           value={String(spec.clearance)}
           options={CLEARANCES.map((c) => ({ value: String(c), label: `${c} mm` }))}
           onChange={(v) => set({ clearance: Number(v) })}
@@ -129,14 +177,23 @@ export function Builder() {
   const [m, setM] = useState<ManifoldToplevel | null>(null);
   const [spec, setSpec] = useState<CubeSpec>(DEFAULT_CUBE);
   const [exploded, setExploded] = useState(false);
+  const [open, setOpen] = useState(false);
   const { toast, show } = useToast();
   useEffect(() => {
     loadManifold().then(setM);
+    // Deep links: ?preset=drawers&open=1&explode=1
+    const q = new URLSearchParams(window.location.search);
+    const preset = BRICK_PRESETS.find((p) => p.id === q.get("preset"));
+    /* eslint-disable react-hooks/set-state-in-effect */
+    if (preset) setSpec(preset.spec);
+    if (q.get("open") === "1") setOpen(true);
+    if (q.get("explode") === "1") setExploded(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
 
   const panels = useMemo(() => (m ? buildCube(m, spec) : []), [m, spec]);
-  const parts = useMemo(() => previewParts(panels), [panels]);
-  const set = (patch: Partial<CubeSpec>) => setSpec((s) => ({ ...s, ...patch }));
+  const parts = useMemo(() => previewParts(panels, open), [panels, open]);
+  const set = (patch: Partial<CubeSpec>) => setSpec((s) => normalize({ ...s, ...patch }));
   const stem = `acmie-brick-${spec.w}x${spec.d}x${spec.h}`;
   const ready = !!m;
 
@@ -160,7 +217,7 @@ export function Builder() {
 
   const stats = [
     { label: "Outer size", value: `${spec.w * UNIT} × ${spec.d * UNIT} × ${spec.h * UNIT} mm`, note: "outer" },
-    { label: "Panels", value: String(panels.length), note: "panels to print" },
+    { label: "Parts", value: String(panels.length), note: "parts to print" },
     { label: "Fit", value: `${spec.clearance} mm`, note: "clearance" },
   ];
 
@@ -178,7 +235,7 @@ export function Builder() {
         <SidebarContent className="px-2 pt-1 pb-4">
           <div className="motion-stagger flex shrink-0 flex-col gap-3">
             <BrickPresetsCard spec={spec} onChange={setSpec} />
-            <Controls spec={spec} set={set} exploded={exploded} setExploded={setExploded} onFitTest={fitTest} ready={ready} />
+            <Controls spec={spec} set={set} exploded={exploded} setExploded={setExploded} open={open} setOpen={setOpen} onFitTest={fitTest} ready={ready} />
           </div>
           <div className="motion-rise mt-3 flex-none [--motion-i:4]">
             <HorrorBanner />
