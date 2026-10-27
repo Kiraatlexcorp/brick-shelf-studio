@@ -9,6 +9,7 @@ import { Download, Expand, Minimize2, Moon, Printer, SlidersHorizontal, Sun } fr
 import { loadManifold } from "@/lib/geometry/manifold";
 import { buildCube, buildFitTile, previewParts, printParts } from "@/lib/brick/cube";
 import { A1_BED, CLEARANCES, DEFAULT_CUBE, UNIT, WALLS, normalize, type BaseJoint, type CubeSpec, type Hinge, type Joint, type Latch, type Side } from "@/lib/brick/spec";
+import { capacity, suggest } from "@/lib/brick/strength";
 import type { MeshPart } from "@/lib/brick/mesh";
 import { meshTo3mf } from "@/lib/export/threemf";
 import { meshToStl } from "@/lib/export/stl";
@@ -98,6 +99,29 @@ const JOINT_HINT: Record<Joint, string> = {
   mixed: "Mixed: pick one joint for stacking (top and bottom) and another for side by side (left and right). Walls follow the stricter of the two.",
 };
 
+/** Load in, suggestion out. All numbers are guesses, not test data. */
+function StrengthMeter({ spec, set }: { spec: CubeSpec; set: (patch: Partial<CubeSpec>) => void }) {
+  const [load, setLoad] = useState(10);
+  const kg = capacity(spec);
+  const ok = kg >= load;
+  const tip = suggest(load, spec);
+  const label = JOINT_OPTIONS.find((o) => o.value === tip.joint)?.label ?? tip.joint;
+  return (
+    <div className="flex flex-col gap-2">
+      <MeasureField label="Load" hint="Weight you plan to put on one cube. Ratings are rough guesses, not lab tests: start light and check for sag." value={load} min={1} max={60} step={1} digits={0} suffix="kg" onChange={setLoad} />
+      <div id="strength-meter" role="status" className={`rounded-lg border px-3 py-2 text-xs ${ok ? "border-green-600/40 bg-green-600/10 text-green-800 dark:text-green-300" : "border-red-600/40 bg-red-600/10 text-red-800 dark:text-red-300"}`}>
+        <div className="font-medium">{ok ? "Holds" : "Too weak"}: about {kg} kg in PLA <span className="opacity-70">(estimate, a guess)</span></div>
+        <div className="mt-1">
+          {tip.ok ? <>Suggest: {label} joint, {tip.wall} mm walls, {tip.material} (about {tip.kg} kg, a guess).</> : <>Over every guess (best about {tip.kg} kg). Split the load or add a shelf bracket.</>}
+        </div>
+        {tip.ok && !ok ? (
+          <button type="button" className="mt-2 rounded-md border border-current px-2 py-0.5 font-medium" onClick={() => set({ joint: tip.joint, wall: tip.wall, bolts: true, ribs: true, gussets: true })}>Apply joint and wall</button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 const SIDES = ["front", "back", "left", "right"] as const;
 const SIDE_OPTIONS: { value: Side; label: string }[] = [
   { value: "wall", label: "Wall" },
@@ -178,6 +202,7 @@ function Controls({ spec, set, exploded, setExploded, open, setOpen, onFitTest, 
         ) : null}
       </SectionCard>
       <SectionCard id="strength" title="Strength">
+        <StrengthMeter spec={spec} set={set} />
         <Choice label="Wall" hint="Panel thickness. 5 mm with ribs and gussets is the 10 kg default; 6 mm or more if you use drawers and dovetails." value={String(spec.wall)}
           options={WALLS.map((w) => ({ value: String(w), label: `${w} mm` }))} onChange={(v) => set({ wall: Number(v) })} />
         {(spec.joint === "mixed" ? spec.side : spec.joint) === "lego" ? <SwitchField id="dovetail" label="Dovetail joins" hint="Rails on the right wall slide down into grooves on the next cube's left wall." checked={spec.dovetail} onChange={(dovetail) => set({ dovetail })} /> : null}
