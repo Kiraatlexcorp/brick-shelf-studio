@@ -1,9 +1,14 @@
 "use client";
 
 import { useId, useRef, useState } from "react";
+import { Minus, Plus } from "lucide-react";
 import { InfoTip } from "@/components/studio/info-tip";
 const formatMm = (v: number) => String(Number(v.toFixed(2)));
 import { Field, FieldContent, FieldLabel } from "@/components/ui/field";
+import { Slider } from "@/components/ui/slider";
+import { UNIT } from "@/lib/brick/spec";
+import { SIZE_PRESET_UNITS, type UnitMode } from "@/lib/brick/units";
+import { cn } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -208,3 +213,188 @@ export function FieldWarning({ text }: { text?: string }) {
     </p>
   );
 }
+
+/**
+ * Stepper, slider, and quick-preset size field for cube W/H/D.
+ * Supports toggling between grid units (u) and millimetres (mm).
+ * Canonical value is always kept in grid units (u).
+ */
+export function SizeStepperField({
+  label,
+  hint,
+  value,
+  unitMode = "u",
+  min = 1,
+  max = 4,
+  onChange,
+}: {
+  label: string;
+  hint?: string;
+  value: number;
+  unitMode?: UnitMode;
+  min?: number;
+  max?: number;
+  onChange: (units: number) => void;
+}) {
+  const hintId = useId();
+  const effectiveMax = Math.max(max, value);
+  const mmVal = value * UNIT;
+  const printed = unitMode === "mm" ? String(mmVal) : String(value);
+
+  const [focused, setFocused] = useState(false);
+  const [override, setOverride] = useState(printed);
+  const drag = useRef<{ x: number; v: number } | null>(null);
+
+  const text = focused ? override : printed;
+
+  function commitUnits(next: number) {
+    if (!Number.isFinite(next)) return;
+    const clamped = Math.max(min, Math.min(effectiveMax, Math.round(next)));
+    onChange(clamped);
+  }
+
+  function commitMm(next: number) {
+    if (!Number.isFinite(next)) return;
+    const units = Math.round(next / UNIT);
+    const clamped = Math.max(min, Math.min(effectiveMax, units));
+    onChange(clamped);
+  }
+
+  return (
+    <Field className="gap-1.5">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center">
+          <FieldLabel htmlFor={`${hintId}-input`}>{label}</FieldLabel>
+          {hint ? <InfoTip id={hintId} label={label} text={hint} /> : null}
+        </div>
+        <span className="font-mono text-xs tabular-nums text-muted-foreground">
+          {unitMode === "u" ? `${mmVal} mm` : `${value}u`}
+        </span>
+      </div>
+
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          aria-label={`Decrease ${label}`}
+          disabled={value <= min}
+          onClick={() => commitUnits(value - 1)}
+          className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border bg-background text-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-35"
+        >
+          <Minus className="size-3.5" />
+        </button>
+
+        <label data-slot="tune-field" className="tune-field flex-1 h-7">
+          <span
+            role="slider"
+            aria-label={label}
+            aria-valuenow={unitMode === "mm" ? mmVal : value}
+            aria-valuemin={unitMode === "mm" ? min * UNIT : min}
+            aria-valuemax={unitMode === "mm" ? effectiveMax * UNIT : effectiveMax}
+            tabIndex={0}
+            className="tune-field-label"
+            onPointerDown={(event) => {
+              (event.target as HTMLElement).setPointerCapture(event.pointerId);
+              drag.current = { x: event.clientX, v: value };
+            }}
+            onPointerMove={(event) => {
+              if (!drag.current) return;
+              const delta = Math.round((event.clientX - drag.current.x) / 16);
+              commitUnits(drag.current.v + delta);
+            }}
+            onPointerUp={() => (drag.current = null)}
+            onPointerCancel={() => (drag.current = null)}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowUp" || event.key === "ArrowRight") {
+                event.preventDefault();
+                commitUnits(value + 1);
+              } else if (event.key === "ArrowDown" || event.key === "ArrowLeft") {
+                event.preventDefault();
+                commitUnits(value - 1);
+              }
+            }}
+          >
+            {label}
+          </span>
+          <input
+            id={`${hintId}-input`}
+            aria-describedby={hint ? hintId : undefined}
+            className="tune-field-input"
+            inputMode="numeric"
+            aria-label={`${label} value`}
+            value={text}
+            onFocus={() => {
+              setOverride(printed);
+              setFocused(true);
+            }}
+            onChange={(event) => {
+              setOverride(event.target.value);
+              const parsed = Number(event.target.value);
+              if (event.target.value.trim() !== "" && Number.isFinite(parsed)) {
+                if (unitMode === "mm") commitMm(parsed);
+                else commitUnits(parsed);
+              }
+            }}
+            onBlur={() => {
+              setFocused(false);
+              const parsed = Number(override);
+              if (override.trim() !== "" && Number.isFinite(parsed)) {
+                if (unitMode === "mm") commitMm(parsed);
+                else commitUnits(parsed);
+              }
+            }}
+          />
+          <span className="tune-field-unit">{unitMode}</span>
+        </label>
+
+        <button
+          type="button"
+          aria-label={`Increase ${label}`}
+          disabled={value >= effectiveMax}
+          onClick={() => commitUnits(value + 1)}
+          className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border bg-background text-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-35"
+        >
+          <Plus className="size-3.5" />
+        </button>
+      </div>
+
+      <div className="px-1 py-1">
+        <Slider
+          value={[unitMode === "mm" ? mmVal : value]}
+          min={unitMode === "mm" ? min * UNIT : min}
+          max={unitMode === "mm" ? effectiveMax * UNIT : effectiveMax}
+          step={unitMode === "mm" ? UNIT : 1}
+          onValueChange={(vals) => {
+            const raw = Array.isArray(vals) ? vals[0] : Number(vals);
+            const next = unitMode === "mm" ? Math.round(raw / UNIT) : raw;
+            commitUnits(next);
+          }}
+        />
+      </div>
+
+      <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+        {SIZE_PRESET_UNITS.map((u) => {
+          const isSelected = value === u;
+          const mm = u * UNIT;
+          const chipLabel = unitMode === "mm" ? `${mm} mm (${u}u)` : `${u}u (${mm} mm)`;
+          return (
+            <button
+              key={u}
+              type="button"
+              onClick={() => commitUnits(u)}
+              aria-pressed={isSelected}
+              className={cn(
+                "h-5.5 rounded-full px-2 text-[11px] font-medium transition-all cursor-pointer flex items-center justify-center",
+                isSelected
+                  ? "bg-foreground text-background shadow-xs font-semibold"
+                  : "border border-border/70 bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground"
+              )}
+            >
+              {chipLabel}
+            </button>
+          );
+        })}
+      </div>
+    </Field>
+  );
+}
+

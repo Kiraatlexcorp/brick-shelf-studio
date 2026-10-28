@@ -36,7 +36,10 @@ import { HalloweenBanner } from "@/components/studio/halloween-banner";
 import { InfoTip } from "@/components/studio/info-tip";
 import { Segmented } from "@/components/studio/segmented";
 import { SectionCard } from "@/components/studio/section-card";
-import { MeasureField, SwitchField } from "@/components/studio/fields";
+import { MeasureField, SizeStepperField, SwitchField } from "@/components/studio/fields";
+import { ViewButtons, type ViewMode } from "@/components/app/viewer";
+import { BED_PRESETS, partsFitBed, type BedType, type PartFitResult, type UnitMode } from "@/lib/brick/bed";
+import { cn } from "@/lib/utils";
 import { Toast, useToast } from "@/components/studio/toast";
 import { BrickPresetsCard } from "@/components/brick/presets-card";
 import { BRICK_PRESETS } from "@/components/brick/presets";
@@ -155,21 +158,87 @@ const SIDE_HINT: Record<Side, string> = {
   drawer: "sliding drawers with a front plate and pull",
 };
 
-function Controls({ spec, set, exploded, setExploded, open, setOpen, onFitTest, ready, fitView, setFitView }: {
-  fitView: boolean; setFitView: (v: boolean) => void;
-  spec: CubeSpec; set: (p: Partial<CubeSpec>) => void; exploded: boolean; setExploded: (v: boolean) => void;
-  open: boolean; setOpen: (v: boolean) => void; onFitTest: () => void; ready: boolean;
+function Controls({
+  spec,
+  set,
+  exploded,
+  setExploded,
+  open,
+  setOpen,
+  onFitTest,
+  ready,
+  fitView,
+  setFitView,
+  unitMode,
+  setUnitMode,
+  bedPreset,
+  setBedPreset,
+  bedFitResults,
+}: {
+  fitView: boolean;
+  setFitView: (v: boolean) => void;
+  spec: CubeSpec;
+  set: (p: Partial<CubeSpec>) => void;
+  exploded: boolean;
+  setExploded: (v: boolean) => void;
+  open: boolean;
+  setOpen: (v: boolean) => void;
+  onFitTest: () => void;
+  ready: boolean;
+  unitMode: UnitMode;
+  setUnitMode: (mode: UnitMode) => void;
+  bedPreset: BedType;
+  setBedPreset: (preset: BedType) => void;
+  bedFitResults: PartFitResult[];
 }) {
   const sides = SIDES.map((k) => spec[k]);
   const hasDoor = sides.includes("door");
   const hasSlide = sides.includes("slide");
   const hasDrawer = spec.front === "drawer";
+  const allFit = bedFitResults.length > 0 && bedFitResults.every((p) => p.fits);
+  const failCount = bedFitResults.filter((p) => !p.fits).length;
+
   return (
     <>
       <SectionCard id="bin" title="Cube size">
-        <MeasureField label="Width" hint="Grid units across, 40 mm each." value={spec.w} min={1} max={4} step={1} digits={0} suffix="u" onChange={(w) => set({ w })} />
-        <MeasureField label="Depth" hint="Grid units front to back, 40 mm each." value={spec.d} min={1} max={4} step={1} digits={0} suffix="u" onChange={(d) => set({ d })} />
-        <MeasureField label="Height" hint="Grid units tall, 40 mm each." value={spec.h} min={1} max={4} step={1} digits={0} suffix="u" onChange={(h) => set({ h })} />
+        <div className="flex items-center justify-between pb-1">
+          <span className="text-xs font-medium text-muted-foreground">Units</span>
+          <Segmented
+            value={unitMode}
+            options={[
+              { value: "u", label: "Grid (u)" },
+              { value: "mm", label: "Millimetres (mm)" },
+            ]}
+            onChange={(v) => setUnitMode(v as UnitMode)}
+          />
+        </div>
+        <SizeStepperField
+          label="Width"
+          hint="Grid units across, 40 mm each."
+          value={spec.w}
+          unitMode={unitMode}
+          min={1}
+          max={4}
+          onChange={(w) => set({ w })}
+        />
+        <SizeStepperField
+          label="Depth"
+          hint="Grid units front to back, 40 mm each."
+          value={spec.d}
+          unitMode={unitMode}
+          min={1}
+          max={4}
+          onChange={(d) => set({ d })}
+        />
+        <SizeStepperField
+          label="Height"
+          hint="Grid units tall, 40 mm each."
+          value={spec.h}
+          unitMode={unitMode}
+          min={1}
+          max={4}
+          onChange={(h) => set({ h })}
+        />
       </SectionCard>
       <SectionCard id="walls" title="Sides">
         {SIDES.map((side) => (
@@ -240,6 +309,66 @@ function Controls({ spec, set, exploded, setExploded, open, setOpen, onFitTest, 
           options={CLEARANCES.map((c) => ({ value: String(c), label: `${c} mm` }))}
           onChange={(v) => set({ clearance: Number(v) })}
         />
+        <Choice<BedType>
+          label="Printer bed"
+          hint="A1 is 256×256 mm, A1 mini is 180×180 mm. Outlines the bed on the ground and checks which printed panels fit."
+          value={bedPreset}
+          options={BED_PRESETS.map((p) => ({ value: p.id, label: p.label }))}
+          onChange={setBedPreset}
+        />
+        {bedPreset !== "off" && bedFitResults.length > 0 ? (
+          <div className="flex flex-col gap-2 rounded-lg border border-border/70 bg-card/60 p-2.5 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-foreground">Bed fit</span>
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-[11px] font-medium",
+                  allFit
+                    ? "bg-green-500/15 text-green-700 dark:text-green-300"
+                    : "bg-destructive/15 text-destructive"
+                )}
+              >
+                {allFit
+                  ? "All parts fit"
+                  : `${failCount} of ${bedFitResults.length} exceed bed`}
+              </span>
+            </div>
+            <div className="flex flex-col gap-1 max-h-44 overflow-y-auto divide-y divide-border/40">
+              {bedFitResults.map((item) => (
+                <div
+                  key={item.name}
+                  className="flex items-center justify-between py-1 text-xs"
+                >
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span
+                      className={
+                        item.fits
+                          ? "text-green-600 dark:text-green-400 font-bold"
+                          : "text-destructive font-bold"
+                      }
+                    >
+                      {item.fits ? "✓" : "✗"}
+                    </span>
+                    <span className="font-medium truncate">{item.name}</span>
+                  </div>
+                  <div className="flex items-center gap-2 tabular-nums text-muted-foreground text-[11px] shrink-0">
+                    <span>{item.w} × {item.d} mm</span>
+                    <span
+                      className={cn(
+                        "rounded px-1.5 py-0.2 text-[10px] font-medium",
+                        item.fits
+                          ? "bg-green-500/10 text-green-700 dark:text-green-300"
+                          : "bg-destructive/10 text-destructive font-semibold"
+                      )}
+                    >
+                      {item.fits ? "Fits" : "Fails"}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
         <SwitchField id="explode" label="Explode view" hint="Pull the panels apart in the preview to see the joints." checked={exploded} onChange={setExploded} />
         <SwitchField id="fitview" label="Preview fit test" hint="Show the actual fit-test pieces for your joint (1-unit decks, side walls and joint parts) instead of the full cube. The clearance tile prints alongside." checked={fitView} onChange={setFitView} />
         <Button variant="outline" disabled={!ready} onClick={onFitTest}>
@@ -654,6 +783,26 @@ export function Builder() {
     return [spec.w * UNIT, spec.d * UNIT, spec.h * UNIT];
   }, [layout.cubes.length, layoutSize, spec.w, spec.d, spec.h]);
 
+  const [unitMode, setUnitMode] = useState<UnitMode>("u");
+  const [view, setView] = useState<ViewMode>("perspective");
+  const [bedPreset, setBedPreset] = useState<BedType>("a1");
+
+  const currentBedPreset = useMemo(
+    () => BED_PRESETS.find((p) => p.id === bedPreset) ?? BED_PRESETS[0],
+    [bedPreset]
+  );
+  const bedSize = currentBedPreset.size;
+
+  const printedParts = useMemo(
+    () => (singlePanels.length > 0 ? printParts(singlePanels) : []),
+    [singlePanels]
+  );
+
+  const bedFitResults = useMemo(
+    () => (bedSize ? partsFitBed(printedParts, bedSize) : []),
+    [printedParts, bedSize]
+  );
+
   const stem = `acmie-brick-${spec.w}x${spec.d}x${spec.h}`;
   const ready = !!m;
 
@@ -776,7 +925,23 @@ export function Builder() {
               onDownloadAll={downloadAll}
               ready={ready}
             />
-            <Controls spec={spec} set={set} exploded={exploded} setExploded={setExploded} open={open} setOpen={setOpen} onFitTest={fitTest} ready={ready} fitView={fitView} setFitView={setFitView} />
+            <Controls
+              spec={spec}
+              set={set}
+              exploded={exploded}
+              setExploded={setExploded}
+              open={open}
+              setOpen={setOpen}
+              onFitTest={fitTest}
+              ready={ready}
+              fitView={fitView}
+              setFitView={setFitView}
+              unitMode={unitMode}
+              setUnitMode={setUnitMode}
+              bedPreset={bedPreset}
+              setBedPreset={setBedPreset}
+              bedFitResults={bedFitResults}
+            />
           </div>
           <div className="motion-rise mt-3 flex-none [--motion-i:4]">
             <HorrorBanner />
@@ -844,12 +1009,17 @@ export function Builder() {
                   size={viewerSize}
                   explode={exploded ? 30 : 0}
                   onSelectCube={selectCube}
+                  view={view}
+                  onViewChange={setView}
+                  bed={bedSize}
+                  bedLabel={currentBedPreset.label}
                 />
               ) : (
                 <div className="grid h-full place-items-center font-mono text-[10px] tracking-[0.22em] text-muted-foreground">DRAWING</div>
               )}
             </div>
-            <div className="absolute right-4 bottom-4 flex items-center gap-2">
+            <div className="absolute right-4 bottom-4 flex items-center gap-2 pointer-events-auto">
+              <ViewButtons view={view} onViewChange={setView} />
               <button
                 type="button"
                 onClick={() => setExploded(!exploded)}
