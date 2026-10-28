@@ -172,22 +172,12 @@ describe("sliding panel locks", () => {
     noOverlap(spec, true);
   });
 
-  it("lockMagnet on slide: 6x3 mm magnet pocket has expected volume", () => {
+  it("lockMagnet on slide is ignored (3 mm panel would be a through-hole)", () => {
     const baseSpec: CubeSpec = { ...DEFAULT_CUBE, front: "slide", panels: 2, latch: "hook", lockMagnet: false };
     const withMagSpec: CubeSpec = { ...DEFAULT_CUBE, front: "slide", panels: 2, latch: "hook", lockMagnet: true };
-
-    const basePanels = noOverlap(baseSpec, false);
-    const withMagPanels = noOverlap(withMagSpec, false);
-    noOverlap(withMagSpec, true);
-
-    const baseSlide = basePanels.find((p) => p.kind === "slide-front-1")!.solid;
-    const magSlide = withMagPanels.find((p) => p.kind === "slide-front-1")!.solid;
-
-    const diffVol = baseSlide.volume() - magSlide.volume();
-    const expectedPocketVol = Math.PI * LOCK_MAGNET.r * LOCK_MAGNET.r * 3.0; // 3 mm panel thickness
-
-    expect(diffVol).toBeGreaterThan(80);
-    expect(diffVol).toBeLessThan(105);
-    expect(diffVol).toBeCloseTo(expectedPocketVol, -1);
+    const a = noOverlap(baseSpec, false).find((p) => p.kind === "slide-front-1")!.solid;
+    const b = noOverlap(withMagSpec, false).find((p) => p.kind === "slide-front-1")!.solid;
+    expect(Math.abs(a.volume() - b.volume())).toBeLessThan(0.01);
   });
+
 });

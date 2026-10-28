@@ -351,7 +351,7 @@ function buildDoor(m: ManifoldToplevel, spec: CubeSpec, Lw: number, H: number) {
     const catchBase = M.cube([3.5, 1.2, z1 - z0]).translate([hx - 3.5, -0.01, z0]);
     fixed.push(catchRamp.add(catchBase));
 
-    const arm = M.cube([5.0, 0.9, 1.6]).translate([hx - 4.8, -2.1, hz - 0.8]);
+    const arm = M.cube([LOCK_DIMS.arm + 0.5, LOCK_DIMS.arm, 1.6]).translate([hx - 5.5, -2.4, hz - 0.8]);
     const barb = M.cube([1.4, 1.3, 1.6]).translate([hx + 0.2, -2.1, hz - 0.8]);
     door = door.add(arm).add(barb);
   } else if (spec.latch === "knob") {
@@ -414,6 +414,9 @@ function buildDoor(m: ManifoldToplevel, spec: CubeSpec, Lw: number, H: number) {
   };
 }
 
+/** Minimum printable lock feature sizes (mm). */
+export const LOCK_DIMS = { arm: 1.2, catch: 1.2, magnetFloor: 0.8 };
+
 /** Sliding panels riding in grooves cut into the top and bottom decks just inside the opening. */
 function buildSlide(m: ManifoldToplevel, spec: CubeSpec, Lw: number, H: number) {
   const { Manifold: M } = m;
@@ -452,12 +455,14 @@ function buildSlide(m: ManifoldToplevel, spec: CubeSpec, Lw: number, H: number) 
     if (i === 0) {
       const lockX = spec.wall + 8;
       if (spec.latch === "hook") {
-        const catchTab = M.cube([3, 0.6, 6]).translate([lockX - 2.5, y0 + c + t + 0.4, DECK - gBot]);
-        fixed.push(catchTab);
-
-        const arm = M.cube([5.5, 0.3, 1.6]).translate([lockX - 4.5, y0 + c + t - 0.2, DECK + 2]);
-        const barb = M.cube([1.6, 0.7, 1.6]).translate([lockX + 1.2, y0 + c + t + 0.4, DECK + 2]);
-        p = p.add(arm).add(barb);
+        // Flex tongue cut from the panel itself (3 mm thick), rooted on the right, barb on the free left end.
+        const back = y0 + c + t, tz = DECK + 2;
+        p = p.subtract(M.cube([6.1, t + 0.2, 0.6]).translate([lockX - 5.1, y0 + c - 0.1, tz + 1.6]));
+        p = p.subtract(M.cube([6.1, t + 0.2, 0.6]).translate([lockX - 5.1, y0 + c - 0.1, tz - 0.6]));
+        p = p.subtract(M.cube([0.6, t + 0.2, 2.8]).translate([lockX - 5.1, y0 + c - 0.1, tz - 0.6]));
+        p = p.add(M.cube([1.2, 0.7, 1.6]).translate([lockX - 4.5, back - 0.01, tz]));
+        // Catch sits in the gap between the two tracks, right of the barb, so opening pushes the barb over it.
+        fixed.push(M.cube([3, LOCK_DIMS.catch, 6]).translate([lockX - 3.1, back + 0.3, DECK - gBot]));
       } else if (spec.latch === "knob") {
         const kz = DECK + 12;
         const holeR = 2.6;
@@ -465,7 +470,8 @@ function buildSlide(m: ManifoldToplevel, spec: CubeSpec, Lw: number, H: number) 
         p = p.subtract(M.cylinder(t + 2, holeR, holeR, 32).rotate([-90, 0, 0]).translate([lockX, y0 + c - 1, kz]));
 
         // Catch tab placed to the side of the peg (lockX + 3.0 to lockX + 8.0)
-        const catchTab = M.cube([5, 0.6, kz + 4 - DECK]).translate([lockX + 3.0, y0 + c + t + 0.3, DECK]);
+        // Catch in the same layer as the cam lobe; top stays below the peg so the turned knob slides past.
+        const catchTab = M.cube([3, LOCK_DIMS.catch, kz - 2.6 - DECK]).translate([lockX + 7.0, y0 + c + t + 0.2, DECK]);
         fixed.push(catchTab);
 
         const handleDisc = M.cylinder(2.6, 5.5, 5.5, 32).rotate([-90, 0, 0]).translate([lockX, y0 + c - 3.0, kz]);
@@ -473,25 +479,18 @@ function buildSlide(m: ManifoldToplevel, spec: CubeSpec, Lw: number, H: number) 
         const handle = handleDisc.add(handleBar);
         const peg = M.cylinder(t + 1.8, pegR, pegR, 24).rotate([-90, 0, 0]).translate([lockX, y0 + c - 0.4, kz]);
         // Cam lobe extends in +X behind catchTab within gap before panel 1
-        const lobeBox = M.cube([6.5, 0.6, 6]).translate([lockX, y0 + c + t + 1.1, kz - 3]);
+        const lobeBox = M.cube([6.5, LOCK_DIMS.catch, 8]).translate([lockX, y0 + c + t + 0.2, kz - 5]);
         const chamfer = M.hull([
-          M.cube([pegR * 2, 0.6, 0.01]).translate([lockX - pegR, y0 + c + t + 1.1, kz]),
+          M.cube([pegR * 2, LOCK_DIMS.catch, 0.01]).translate([lockX - pegR, y0 + c + t + 0.2, kz]),
           lobeBox,
         ]);
         const knobSolid = handle.add(peg).add(lobeBox).add(chamfer);
-        const knobOpen = knobSolid.translate([shift, 0, 0]);
+        // Unlocked: lobe turned to point up, then the panel slides open.
+        const knobOpen = knobSolid.translate([-lockX, 0, -kz]).rotate([0, -90, 0]).translate([lockX + shift, 0, kz]);
         parts.push({ kind: "knob-slide", solid: knobSolid, open: knobOpen, flat: [90, 0, 0] });
       }
 
-      if (spec.lockMagnet) {
-        const mz = H - DECK - 4;
-        const magTab = M.cube([9, 1.3, 8]).translate([lockX - 4.5, y0 + c + t + 0.2, mz - 4]);
-        const cupDeck = M.cylinder(LOCK_MAGNET.depth + 0.01, LOCK_MAGNET.r, LOCK_MAGNET.r, 32).rotate([-90, 0, 0]).translate([lockX, y0 + c + t + 0.2 - 0.01, mz]);
-        fixed.push(magTab.subtract(cupDeck));
-
-        const cupPanel = M.cylinder(LOCK_MAGNET.depth + 0.01, LOCK_MAGNET.r, LOCK_MAGNET.r, 32).rotate([-90, 0, 0]).translate([lockX, y0 + c + t - LOCK_MAGNET.depth, mz]);
-        p = p.subtract(cupPanel);
-      }
+      // No magnet catch on slides: a 3 mm panel can't hold a 6 x 3 mm pocket with a printable floor.
     }
 
     panels.push({ solid: p, open: p.translate([i === 0 ? shift : -shift, 0, 0]) });

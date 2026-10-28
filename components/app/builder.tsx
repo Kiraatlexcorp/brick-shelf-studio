@@ -291,13 +291,13 @@ function Controls({
                   else set({ lock: "none", latch: spec.latch === "hook" || spec.latch === "knob" ? "magnet" : spec.latch });
                 }}
               />
-              <SwitchField
+              {hasDoor ? <SwitchField
                 id="lockMagnet"
                 label="Magnet catch"
-                hint="Adds a 6 × 3 mm disc magnet pocket in the door/panel free edge and matching pocket in the frame/deck."
+                hint="Adds a 6 × 3 mm disc magnet pocket in the door free edge and matching pocket in the frame/deck."
                 checked={spec.lockMagnet}
                 onChange={(lockMagnet) => set({ lockMagnet })}
-              />
+              /> : null}
             </>
           ) : null}
           <SwitchField id="open" label="Show open" hint="Swing doors open and pull drawers out in the preview." checked={open} onChange={setOpen} />
