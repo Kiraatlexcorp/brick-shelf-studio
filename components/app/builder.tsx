@@ -7,7 +7,7 @@ import { zipSync } from "fflate";
 import type { ManifoldToplevel } from "manifold-3d";
 import { ChevronDown, Download, Expand, Minimize2, Moon, Printer, SlidersHorizontal, Sun } from "lucide-react";
 import { loadManifold } from "@/lib/geometry/manifold";
-import { buildCube, buildFitTile, buildJointFit, previewParts, printParts } from "@/lib/brick/cube";
+import { buildCube, gridfinityLayout, buildFitTile, buildJointFit, previewParts, printParts } from "@/lib/brick/cube";
 import { A1_BED, CLEARANCES, DEFAULT_CUBE, UNIT, WALLS, normalize, type BaseJoint, type CubeSpec, type Hinge, type Joint, type Latch, type Lock, type Side } from "@/lib/brick/spec";
 import {
   addCube,
@@ -267,7 +267,8 @@ function Controls({
               <Choice label="Drawers" hint="One full height drawer or two half height drawers (needs 2u tall)." value={String(spec.drawers)}
                 options={[{ value: "1", label: "1 full" }, { value: "2", label: "2 half" }]} onChange={(v) => set({ drawers: Number(v) })} />
               <MeasureField label="Dividers" hint="Walls inside each drawer, side to side." value={spec.dividers} min={0} max={3} step={1} digits={0} suffix="" onChange={(dividers) => set({ dividers })} />
-              <SwitchField id="gridfinity" label="Gridfinity floor" hint="Adds a 42 mm Gridfinity baseplate grid to each drawer floor so standard bins lock in place. Cells only appear where a full 42 mm square fits." checked={spec.gridfinity} onChange={(gridfinity) => set({ gridfinity })} />
+              <SwitchField id="gridfinity" label="Gridfinity floor" hint="Adds a 42 mm Gridfinity baseplate grid to each drawer floor so standard bins lock in place. Dividers snap to cell lines so every compartment holds whole 42 mm cells." checked={spec.gridfinity} onChange={(gridfinity) => set({ gridfinity })} />
+              {spec.gridfinity ? <GridfinityInfo spec={spec} onSnap={(w) => set({ w })} /> : null}
             </>
           ) : null}
           {hasSlide ? (
@@ -1105,5 +1106,23 @@ function MobileBar({ disabled, on3mf, onStl, onFit }: { disabled: boolean; on3mf
         </Button>
       </nav>
     </>
+  );
+}
+
+function GridfinityInfo({ spec, onSnap }: { spec: CubeSpec; onSnap: (w: number) => void }) {
+  const g = gridfinityLayout(spec);
+  let fix: number | null = null;
+  if (g.warn) for (let w = spec.w + 1; w <= 8; w++) if (!gridfinityLayout({ ...spec, w }).warn) { fix = w; break; }
+  return (
+    <div data-testid="gf-info" className="flex flex-col gap-1 rounded-md bg-muted/50 px-2.5 py-2 text-xs text-muted-foreground">
+      <span>
+        <b className="text-foreground">{g.cells} cell{g.cells === 1 ? "" : "s"}</b> per drawer · {g.comps.map((c) => `${c.cols}×${g.rows}`).join(" | ")}
+      </span>
+      <span>Interior {g.inner[0].toFixed(1)} × {g.inner[1].toFixed(1)} mm</span>
+      {g.warn ? <span className="text-destructive">{g.warn}</span> : null}
+      {fix ? (
+        <button type="button" className="self-start underline text-foreground" onClick={() => onSnap(fix)}>Widen to {fix}u so it fits</button>
+      ) : null}
+    </div>
   );
 }

@@ -500,24 +500,94 @@ function buildSlide(m: ManifoldToplevel, spec: CubeSpec, Lw: number, H: number) 
 }
 
 /** Drawer box with rear runners, a front plate covering the opening, a pull and a label slot. */
-/** Gridfinity baseplate ridges: 42 mm cells, 4.65 mm tall, 45° flanks (prints without support). */
-export function gridfinityFloor(m: ManifoldToplevel, x: number, y: number, z: number, w: number, d: number) {
-  const P = 42, H = 4.65, top = 0.8;
-  const nx = Math.floor(w / P), ny = Math.floor(d / P);
-  if (!nx || !ny) return m.Manifold.cube([0.01, 0.01, 0.01]).translate([x, y, z]);
-  const ox = x + (w - nx * P) / 2, oy = y + (d - ny * P) / 2;
-  const hb = Math.min(H, 2.85), ht = top / 2;
-  const ridge = (a: Vec3, b: Vec3, alongX: boolean) => {
-    const pts: Vec3[] = [];
-    for (const q of [a, b]) for (const [o, h] of [[hb, 0], [ht, H]] as const)
-      for (const sgn of [-1, 1]) pts.push(alongX ? [q[0], q[1] + sgn * o, q[2] + h] : [q[0] + sgn * o, q[1], q[2] + h]);
-    return m.Manifold.hull(pts);
-  };
-  const parts = [];
-  const cl = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
-  for (let i = 0; i <= nx; i++) { const gx = cl(ox + i * P, x + hb, x + w - hb); parts.push(ridge([gx, y, z], [gx, y + d, z], false)); }
-  for (let j = 0; j <= ny; j++) { const gy = cl(oy + j * P, y + hb, y + d - hb); parts.push(ridge([x, gy, z], [x + w, gy, z], true)); }
-  return m.Manifold.union(parts);
+/** Gridfinity: 42 mm pitch, baseplate profile 0.7 / 1.8 / 2.15 mm (top chamfer, straight, bottom chamfer), 4 mm cell corners. */
+export const GF = { pitch: 42, height: 4.65, r: 4, gap: 0.25, divider: 1.2 };
+const GF_STATIONS = [
+  { inset: 2.85, z: 0 },
+  { inset: 0.7, z: 2.15 },
+  { inset: 0.7, z: 3.95 },
+  { inset: 0, z: GF.height },
+] as const;
+
+export type GfCompartment = { x: number; w: number; cols: number };
+export type GfLayout = {
+  inner: [number, number]; rows: number; comps: GfCompartment[]; dividerX: number[]; cells: number; warn: string | null;
+};
+
+const DRAWER_SHELL = 1.6;
+
+/** Interior of one drawer box (mm), measured from the box inner wall. */
+export function drawerInner(spec: CubeSpec): [number, number] {
+  const T = spec.wall, c = spec.clearance;
+  const backDepth = spec.back === "wall" ? T : 0;
+  const gus = spec.gussets && spec.back === "wall" ? GUSSET : 0;
+  const depth = spec.d * UNIT - backDepth - gus - 1.5;
+  return [spec.w * UNIT - 2 * T - 2 * c - 2 * DRAWER_SHELL, depth - 2 * DRAWER_SHELL];
+}
+
+/**
+ * Where dividers go so every compartment holds whole 42 mm cells. Dividers land on cell lines
+ * (plus their thickness and a fit gap each side); spare width is shared out evenly.
+ */
+export function gridfinityLayout(input: CubeSpec): GfLayout {
+  const spec = normalize(input);
+  const [iw, id] = drawerInner(spec);
+  const k = spec.dividers, n = k + 1, P = GF.pitch;
+  const rows = Math.floor((id - 2 * GF.gap) / P);
+  const total = Math.max(0, Math.floor((iw - n * 2 * GF.gap - k * GF.divider) / P));
+  let warn: string | null = null;
+  let cols: number[];
+  if (rows < 1 || total < 1) {
+    cols = Array(n).fill(0);
+    warn = `Drawer interior ${iw.toFixed(0)} × ${id.toFixed(0)} mm is smaller than one 42 mm cell.`;
+  } else if (total < n) {
+    cols = Array.from({ length: n }, (_, i) => (i < total ? 1 : 0));
+    warn = `${k} divider${k > 1 ? "s" : ""} can't land on cell lines: only ${total} column${total > 1 ? "s" : ""} fit. ${n - total} compartment${n - total > 1 ? "s get" : " gets"} no grid.`;
+  } else {
+    const base = Math.floor(total / n), extra = total % n;
+    cols = Array.from({ length: n }, (_, i) => base + (i < extra ? 1 : 0));
+    if (extra) warn = `${total} columns don't split evenly into ${n} compartments (${cols.join(" + ")}).`;
+  }
+  const P2 = 2 * GF.gap;
+  const fits = cols.every((c) => c > 0);
+  // When some compartment can't hold a cell, keep dividers evenly spaced and only grid the ones that can.
+  const even = (iw - k * GF.divider) / n;
+  const share = fits ? (iw - k * GF.divider - cols.reduce((a, c) => a + c * P + P2, 0)) / n : 0;
+  const comps: GfCompartment[] = [];
+  const dividerX: number[] = [];
+  let x = 0;
+  cols.forEach((c, i) => {
+    const w = fits ? c * P + P2 + share : even;
+    comps.push({ x, w, cols: c * P + P2 <= w + 1e-6 ? c : 0 });
+    x += w;
+    if (i < k) { dividerX.push(x); x += GF.divider; }
+  });
+  const kept = comps.reduce((a, c) => a + c.cols, 0);
+  return { inner: [iw, id], rows: Math.max(0, rows), comps, dividerX, cells: kept * Math.max(0, rows), warn };
+}
+
+function roundedSlab(m: ManifoldToplevel, x: number, y: number, w: number, d: number, r: number, z: number, h: number, seg: number) {
+  const rr = Math.max(0.01, Math.min(r, w / 2 - 0.01, d / 2 - 0.01));
+  const cs = m.CrossSection.circle(rr, seg);
+  const pts = [[x + rr, y + rr], [x + w - rr, y + rr], [x + w - rr, y + d - rr], [x + rr, y + d - rr]];
+  return m.CrossSection.hull(pts.map(([a, b]) => cs.translate([a, b]))).extrude(h).translate([0, 0, z]);
+}
+
+/** One Gridfinity baseplate of cols × rows cells; bins drop into its sockets. */
+export function gridfinityPlate(m: ManifoldToplevel, x: number, y: number, z: number, cols: number, rows: number, seg = 24) {
+  const P = GF.pitch;
+  let plate = roundedSlab(m, x, y, cols * P, rows * P, GF.r, z, GF.height, seg);
+  const sockets = [];
+  for (let i = 0; i < cols; i++)
+    for (let j = 0; j < rows; j++) {
+      const cx = x + i * P, cy = y + j * P;
+      const slab = (st: (typeof GF_STATIONS)[number]) =>
+        roundedSlab(m, cx + st.inset, cy + st.inset, P - 2 * st.inset, P - 2 * st.inset, Math.max(0.5, GF.r - st.inset), z + st.z - (st.z === GF.height ? -0.01 : st.z === 0 ? 0.01 : 0), 0.02, seg);
+      // The socket profile is not convex (chamfer, straight, chamfer), so hull each band separately.
+      const [s0, s1, s2, s3] = GF_STATIONS.map(slab);
+      sockets.push(m.Manifold.hull([s0, s1]), m.Manifold.hull([s1, s2]), m.Manifold.hull([s2, s3]));
+    }
+  return plate.subtract(m.Manifold.union(sockets));
 }
 
 function buildDrawer(
@@ -528,16 +598,29 @@ function buildDrawer(
   const { Manifold: M } = m;
   const c = spec.clearance;
   const T = spec.wall;
-  const sh = 1.6;
+  const sh = DRAWER_SHELL;
   const x0 = T + c;
   const bw = o.W - 2 * T - 2 * c;
   const bh = o.rowH - 2 * c;
   const z0 = o.z0 + c;
   let boxS = M.cube([bw, o.depth, bh]).translate([x0, 0, z0]);
   boxS = boxS.subtract(M.cube([bw - 2 * sh, o.depth - 2 * sh, bh]).translate([x0 + sh, sh, z0 + sh]));
-  for (let i = 1; i <= spec.dividers; i++)
-    boxS = boxS.add(M.cube([1.2, o.depth - 2 * sh, bh - 3]).translate([x0 + (bw * i) / (spec.dividers + 1) - 0.6, sh, z0 + sh]));
-  if (spec.gridfinity) boxS = boxS.add(gridfinityFloor(m, x0 + sh, sh, z0 + sh, bw - 2 * sh, o.depth - 2 * sh));
+  if (spec.gridfinity) {
+    // Dividers sit on cell lines; each compartment gets its own whole-cell baseplate.
+    const g = gridfinityLayout(spec);
+    const id = o.depth - 2 * sh;
+    for (const dx of g.dividerX)
+      boxS = boxS.add(M.cube([GF.divider, id, bh - 3]).translate([x0 + sh + dx, sh, z0 + sh]));
+    for (const cp of g.comps) {
+      if (!cp.cols || !g.rows) continue;
+      const px = x0 + sh + cp.x + (cp.w - cp.cols * GF.pitch) / 2;
+      const py = sh + (id - g.rows * GF.pitch) / 2;
+      boxS = boxS.add(gridfinityPlate(m, px, py, z0 + sh - 0.01, cp.cols, g.rows));
+    }
+  } else {
+    for (let i = 1; i <= spec.dividers; i++)
+      boxS = boxS.add(M.cube([1.2, o.depth - 2 * sh, bh - 3]).translate([x0 + (bw * i) / (spec.dividers + 1) - 0.6, sh, z0 + sh]));
+  }
   // Runners at the back of both sides ride in the wall grooves; the groove lip stops them at the front.
   const rl = 16;
   const rh = GROOVE.height - 2 * c;

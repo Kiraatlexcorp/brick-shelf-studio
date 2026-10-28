@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import Module from "manifold-3d";
-import { buildCube, printParts, previewParts } from "@/lib/brick/cube";
+import { gridfinityPlate, buildCube, printParts, previewParts } from "@/lib/brick/cube";
 import { boundsOf, meshTo3mf } from "@/lib/export/threemf";
 import { A1_BED, DEFAULT_CUBE, STUD_H, STUD_R, UNIT, type CubeSpec, type Hinge } from "@/lib/brick/spec";
 
@@ -113,12 +113,12 @@ describe("sliding doors and strength", () => {
 });
 
 describe("gridfinity drawer floor", () => {
-  it("adds 42 mm ridges inside the drawer without breaking clearance", () => {
+  it("adds a whole-cell 42 mm baseplate inside the drawer without breaking clearance", () => {
     noOverlap({ ...DEFAULT_CUBE, front: "drawer", drawers: 1, gridfinity: true }, true);
     const base: CubeSpec = { ...DEFAULT_CUBE, front: "drawer", drawers: 1, dividers: 0 };
     const plain = buildCube(m, base).find((p) => p.kind === "drawer-1")!;
     const grid = buildCube(m, { ...base, gridfinity: true }).find((p) => p.kind === "drawer-1")!;
-    expect(grid.solid.volume()).toBeGreaterThan(plain.solid.volume() + 1000);
+    expect(grid.solid.volume()).toBeGreaterThan(plain.solid.volume() + 0.9 * gridfinityPlate(m, 0, 0, 0, 1, 1).volume());
     const b = grid.solid.boundingBox(), pb = plain.solid.boundingBox();
     for (const k of [0, 1, 2]) { expect(b.min[k]).toBeCloseTo(pb.min[k], 3); expect(b.max[k]).toBeCloseTo(pb.max[k], 3); }
     expect(grid.solid.status()).toBe("NoError");
