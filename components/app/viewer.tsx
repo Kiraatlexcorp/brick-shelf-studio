@@ -1,5 +1,6 @@
 "use client";
 
+import { centerOnBed } from "@/lib/brick/center";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useThree } from "@react-three/fiber";
 import { OrbitControls, OrthographicCamera, PerspectiveCamera } from "@react-three/drei";
@@ -263,6 +264,8 @@ export function Viewer({
   const controlsRef = useRef<any>(null);
 
   const hasLayout = cubes && cubes.length > 0;
+  // Centre on what is actually drawn (drawer pulls, hooks and layout offsets included), not the nominal size.
+  const shift = useMemo(() => centerOnBed(hasLayout ? cubes! : [{ parts }]), [hasLayout, cubes, parts]);
 
   return (
     <div className="relative h-full w-full">
@@ -303,7 +306,7 @@ export function Viewer({
         )}
         <CameraController size={size} view={view} controlsRef={controlsRef} bed={bed} />
         {bed && bed > 0 ? <PrinterBed size={bed} label={bedLabel} /> : null}
-        <group position={[-w / 2, -d / 2, 0]}>
+        <group position={shift}>
           {hasLayout
             ? cubes.map((c) => (
                 <group
