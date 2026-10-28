@@ -117,16 +117,23 @@ export function buildJoints(m: ManifoldToplevel, spec: CubeSpec): JointGeometry 
   const side = sideJoint(spec);
   // Side joint features only on walls; an Open (or door) side gets none.
   const L = spec.left === "wall", Rt = spec.right === "wall";
+  const F = spec.front === "wall", B = spec.back === "wall";
   /** Keep a cut on the left (x = 0) or right (x = W) face only when that side is a wall. */
   const onL = (x: Manifold) => { if (L) cuts.push(x); };
   const onR = (x: Manifold) => { if (Rt) cuts.push(x); };
   const partR = (p: JointPart) => { if (Rt) parts.push(p); };
+  const onF = (x: Manifold) => { if (F) cuts.push(x); };
+  const onB = (x: Manifold) => { if (B) cuts.push(x); };
+  const partF = (p: JointPart) => { if (F) parts.push(p); };
+  const partB = (p: JointPart) => { if (B) parts.push(p); };
 
   if (stack === "twist") {
     const sock = twistSocket(m, c);
     // Back nodes move forward when rail staples sit at the back of the side walls (mixed mode).
     const yb = side !== "rail" ? D - 13 : spec.d > 1 ? D - 24 : 13;
-    const corners: [number, number][] = yb === 13 ? [[13, 13], [W - 13, 13]] : [[13, 13], [W - 13, 13], [13, yb], [W - 13, yb]];
+    // Front nodes step back behind sliding panels, doors and drawers so they never hit a moving part.
+    const yf = spec.front === "wall" || spec.front === "open" ? 13 : 24;
+    const corners: [number, number][] = yb === 13 ? [[13, yf], [W - 13, yf]] : [[13, yf], [W - 13, yf], [13, yb], [W - 13, yb]];
     corners.forEach(([x, y], i) => {
       cuts.push(sock.translate([x, y, H]));
       cuts.push(sock.mirror([0, 0, 1]).translate([x, y, 0]));
@@ -176,22 +183,32 @@ export function buildJoints(m: ManifoldToplevel, spec: CubeSpec): JointGeometry 
     }
     // Front clip: a flat bar recessed into the front faces across the deck seam, two pins into each deck,
     // so the key can't slide back out the front. Pins sit beside the slot, not in it.
-    const { pinR, barT } = RAIL_CLIP;
-    const bw = 15, bh = 5, px = 5.5;
-    for (const x of xs) {
-      for (const z0 of [H - bh - c, -0.01]) cuts.push(M.cube([bw + 2 * c, barT + 0.01, bh + c + 0.01]).translate([x - bw / 2 - c, -0.01, z0]));
-      for (const dx of [-px, px]) for (const z of [H - 3, 3])
-        cuts.push(M.cylinder(4.5, pinR + c, pinR + c, 20).rotate([-90, 0, 0]).translate([x + dx, barT - 0.01, z]));
-    }
-    xs.forEach((x, i) => {
-      parts.push({
-        kind: `deck-key-${i + 1}`, group: "joint", flat: [0, 0, 0], out: [0, 0, 1],
-        solid: railKey(m, barT + c, D - 1 - c, c).rotate([0, -90, 0]).rotate([0, 0, -90]).translate([x, 0, H]),
+    // When the front is a sliding door, panels ride in deck grooves across the front opening.
+    if (spec.front !== "slide") {
+      const { pinR, barT } = RAIL_CLIP;
+      const bw = 15, bh = 5, px = 5.5;
+      for (const x of xs) {
+        for (const z0 of [H - bh - c, -0.01]) cuts.push(M.cube([bw + 2 * c, barT + 0.01, bh + c + 0.01]).translate([x - bw / 2 - c, -0.01, z0]));
+        for (const dx of [-px, px]) for (const z of [H - 3, 3])
+          cuts.push(M.cylinder(4.5, pinR + c, pinR + c, 20).rotate([-90, 0, 0]).translate([x + dx, barT - 0.01, z]));
+      }
+      xs.forEach((x, i) => {
+        parts.push({
+          kind: `deck-key-${i + 1}`, group: "joint", flat: [0, 0, 0], out: [0, 0, 1],
+          solid: railKey(m, barT + c, D - 1 - c, c).rotate([0, -90, 0]).rotate([0, 0, -90]).translate([x, 0, H]),
+        });
+        const bar = M.cube([bw, barT - c, 2 * bh - 2 * c]).translate([x - bw / 2, 0.005, H - bh + c]);
+        const pins = [-px, px].flatMap((dx) => [H - 3, H + 3].map((z) => M.cylinder(4, pinR, pinR, 20).rotate([-90, 0, 0]).translate([x + dx, barT - c - 0.01, z])));
+        parts.push({ kind: `deck-clip-${i + 1}`, group: "joint", solid: M.union([bar, ...pins]), flat: [90, 0, 0], out: [0, -1, 0] });
       });
-      const bar = M.cube([bw, barT - c, 2 * bh - 2 * c]).translate([x - bw / 2, 0.005, H - bh + c]);
-      const pins = [-px, px].flatMap((dx) => [H - 3, H + 3].map((z) => M.cylinder(4, pinR, pinR, 20).rotate([-90, 0, 0]).translate([x + dx, barT - c - 0.01, z])));
-      parts.push({ kind: `deck-clip-${i + 1}`, group: "joint", solid: M.union([bar, ...pins]), flat: [90, 0, 0], out: [0, -1, 0] });
-    });
+    } else {
+      xs.forEach((x, i) => {
+        parts.push({
+          kind: `deck-key-${i + 1}`, group: "joint", flat: [0, 0, 0], out: [0, 0, 1],
+          solid: railKey(m, 1 + c, D - 1 - c, c).rotate([0, -90, 0]).rotate([0, 0, -90]).translate([x, 0, H]),
+        });
+      });
+    }
   }
 
   const t = CLIP.depth;
@@ -218,14 +235,14 @@ export function buildJoints(m: ManifoldToplevel, spec: CubeSpec): JointGeometry 
     // u (seam outward) -> -z, thickness -> +y into the cube, v -> x
     const facePocket = pocket.rotate([0, 90, 0]).rotate([0, 0, 90]);
     between(spec.w).forEach((x, i) => {
-      for (const [y, flip] of [[0, false], [D, true]] as const) {
-        const fp = flip ? facePocket.mirror([0, 1, 0]) : facePocket;
-        cuts.push(fp.translate([x, y, H]));
-        cuts.push(fp.mirror([0, 0, 1]).translate([x, y, 0]));
+      for (const [z, up] of [[H, true], [0, false]] as const) {
+        const fp = up ? facePocket : facePocket.mirror([0, 0, 1]);
+        onF(fp.translate([x, 0, z]));
+        onB(fp.mirror([0, 1, 0]).translate([x, D, z]));
       }
       const k = key.rotate([0, 90, 0]).rotate([0, 0, 90]);
-      parts.push({ kind: `clip-front-${i + 1}`, group: "joint", solid: k.translate([x, 0.005, H]), flat: [-90, 0, 0], out: [0, -1, 0] });
-      parts.push({ kind: `clip-back-${i + 1}`, group: "joint", solid: k.mirror([0, 1, 0]).translate([x, D - 0.005, H]), flat: [90, 0, 0], out: [0, 1, 0] });
+      partF({ kind: `clip-front-${i + 1}`, group: "joint", solid: k.translate([x, 0.005, H]), flat: [-90, 0, 0], out: [0, -1, 0] });
+      partB({ kind: `clip-back-${i + 1}`, group: "joint", solid: k.mirror([0, 1, 0]).translate([x, D - 0.005, H]), flat: [90, 0, 0], out: [0, 1, 0] });
     });
   }
 
