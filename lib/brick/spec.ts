@@ -29,6 +29,8 @@ export const KNUCKLE_R = DECK / 2;
 export const PIN_R = 1.05;
 /** 4 × 2 mm disc magnet pocket. */
 export const MAGNET = { r: 2.1, depth: 2.2 };
+/** 6 × 3 mm disc magnet pocket for door and slide locks. */
+export const LOCK_MAGNET = { r: 3.1, depth: 3.2 };
 /** Drawer rail groove in the side walls. */
 export const GROOVE = { depth: 1.8, height: 6, lip: 0.8, lipLen: 3 };
 
@@ -42,7 +44,10 @@ export const JOINTS: Joint[] = [...BASE_JOINTS, "mixed"];
 
 export type Side = "wall" | "open" | "door" | "drawer" | "slide";
 export type Hinge = "left" | "right" | "top" | "bottom";
-export type Latch = "magnet" | "bump";
+export type Latch = "magnet" | "bump" | "hook" | "knob";
+export const LATCHES: Latch[] = ["magnet", "bump", "hook", "knob"];
+export type Lock = "none" | "latch" | "knob";
+export const LOCKS: Lock[] = ["none", "latch", "knob"];
 
 export type CubeSpec = {
   /** Grid units, 1..4 each. */
@@ -67,6 +72,10 @@ export type CubeSpec = {
   ribs: boolean;
   hinge: Hinge;
   latch: Latch;
+  /** Lock style: "none" (default) or "latch" (flexible snap hook) or "knob" (turn-knob cam). Mapped to latch. */
+  lock: Lock;
+  /** Extra 6 × 3 mm disc magnet pocket for hook/knob door or slide locks. */
+  lockMagnet: boolean;
   /** Drawers stacked in the front opening: 1 full height or 2 half height. */
   drawers: number;
   /** Divider walls inside each drawer. */
@@ -103,6 +112,8 @@ export const DEFAULT_CUBE: CubeSpec = {
   ribs: true,
   hinge: "left",
   latch: "magnet",
+  lock: "none",
+  lockMagnet: false,
   drawers: 1,
   dividers: 0,
   panels: 2,
@@ -134,6 +145,21 @@ export function normalize(spec: CubeSpec): CubeSpec {
   s.drawers = Math.max(1, Math.min(2, Math.round(s.drawers)));
   s.dividers = Math.max(0, Math.min(3, Math.round(s.dividers)));
   s.panels = s.panels === 1 ? 1 : 2;
+
+  // Door lock & latch: map lock ("none" | "latch" | "knob") onto latch ("hook" | "knob").
+  if (s.lock === "latch" || s.latch === "hook") {
+    s.lock = "latch";
+    s.latch = "hook";
+  } else if (s.lock === "knob" || s.latch === "knob") {
+    s.lock = "knob";
+    s.latch = "knob";
+  } else {
+    s.lock = "none";
+    if (!LATCHES.includes(s.latch)) s.latch = "magnet";
+  }
+
+  s.lockMagnet = !!s.lockMagnet;
+
   if (!JOINTS.includes(s.joint)) s.joint = "lego";
   // The hook bolts through the back wall's M4 holes.
   s.wallMount = !!s.wallMount && s.back === "wall";

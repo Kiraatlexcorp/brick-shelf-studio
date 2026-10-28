@@ -8,7 +8,7 @@ import type { ManifoldToplevel } from "manifold-3d";
 import { ChevronDown, Download, Expand, Minimize2, Moon, Printer, SlidersHorizontal, Sun } from "lucide-react";
 import { loadManifold } from "@/lib/geometry/manifold";
 import { buildCube, buildFitTile, buildJointFit, previewParts, printParts } from "@/lib/brick/cube";
-import { A1_BED, CLEARANCES, DEFAULT_CUBE, UNIT, WALLS, normalize, type BaseJoint, type CubeSpec, type Hinge, type Joint, type Latch, type Side } from "@/lib/brick/spec";
+import { A1_BED, CLEARANCES, DEFAULT_CUBE, UNIT, WALLS, normalize, type BaseJoint, type CubeSpec, type Hinge, type Joint, type Latch, type Lock, type Side } from "@/lib/brick/spec";
 import {
   addCube,
   CANVAS_STORAGE_KEY,
@@ -273,6 +273,32 @@ function Controls({
           {hasSlide ? (
             <Choice label="Sliding panels" hint="One panel covers half the opening; two overlap and slide past each other." value={String(spec.panels)}
               options={[{ value: "1", label: "1" }, { value: "2", label: "2" }]} onChange={(v) => set({ panels: Number(v) })} />
+          ) : null}
+          {hasDoor || hasSlide ? (
+            <>
+              <Choice<Lock>
+                label="Lock"
+                hint="None: no lock. Latch: printed flexible snap latch hook. Knob: turn-knob cam catch."
+                value={spec.lock}
+                options={[
+                  { value: "none", label: "None" },
+                  { value: "latch", label: "Latch" },
+                  { value: "knob", label: "Knob" },
+                ]}
+                onChange={(lock) => {
+                  if (lock === "latch") set({ lock: "latch", latch: "hook" });
+                  else if (lock === "knob") set({ lock: "knob", latch: "knob" });
+                  else set({ lock: "none", latch: spec.latch === "hook" || spec.latch === "knob" ? "magnet" : spec.latch });
+                }}
+              />
+              <SwitchField
+                id="lockMagnet"
+                label="Magnet catch"
+                hint="Adds a 6 × 3 mm disc magnet pocket in the door/panel free edge and matching pocket in the frame/deck."
+                checked={spec.lockMagnet}
+                onChange={(lockMagnet) => set({ lockMagnet })}
+              />
+            </>
           ) : null}
           <SwitchField id="open" label="Show open" hint="Swing doors open and pull drawers out in the preview." checked={open} onChange={setOpen} />
         </SectionCard>

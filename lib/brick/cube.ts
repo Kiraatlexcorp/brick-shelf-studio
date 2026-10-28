@@ -1,6 +1,6 @@
 import type { Manifold, ManifoldToplevel } from "manifold-3d";
 import {
-  BOLT_R, CLEARANCES, DECK, DOVE, GROOVE, GUSSET, KNUCKLE_R, MAGNET, PEG_R, PIN_R, RIB_H, RIB_T, SLOT_EXTRA,
+  BOLT_R, CLEARANCES, DECK, DOVE, GROOVE, GUSSET, KNUCKLE_R, MAGNET, LOCK_MAGNET, PEG_R, PIN_R, RIB_H, RIB_T, SLOT_EXTRA,
   SOCKET_EXTRA, STUD_H, STUD_R, TAB_LEN, UNIT,
   normalize, type CubeSpec, type PartGroup, type SideKey,
 } from "@/lib/brick/spec";
@@ -211,12 +211,30 @@ export function buildCube(m: ManifoldToplevel, input: CubeSpec): Panel[] {
         kind: `door-${side}`, group: "door", solid: toWorld(door.door), open: toWorld(door.opened),
         flat: FLAT_OF[side], out: OUT_OF[side],
       });
+      if (door.parts) {
+        for (const pt of door.parts) {
+          fixtures.push({
+            kind: `${pt.kind}-${side}`, group: "door", solid: toWorld(pt.solid), open: toWorld(pt.open),
+            flat: pt.flat, out: OUT_OF[side],
+          });
+        }
+      }
     } else if (kind === "slide") {
       const sl = buildSlide(m, spec, Lw, H);
       for (const g of sl.grooves) deckCuts.push(toWorld(g));
+      if (sl.fixed) for (const f of sl.fixed) deckAdds.push(toWorld(f));
+      if (sl.pockets) for (const p of sl.pockets) deckCuts.push(toWorld(p));
       sl.panels.forEach((p, i) =>
         fixtures.push({ kind: `slide-${side}-${i + 1}`, group: "slide", solid: toWorld(p.solid), open: toWorld(p.open), flat: FLAT_OF[side], out: OUT_OF[side] }),
       );
+      if (sl.parts) {
+        for (const pt of sl.parts) {
+          fixtures.push({
+            kind: `${pt.kind}-${side}`, group: "slide", solid: toWorld(pt.solid), open: toWorld(pt.open),
+            flat: pt.flat, out: OUT_OF[side],
+          });
+        }
+      }
     } else if (kind === "drawer" && side === "front") {
       rows.forEach((z0, i) => {
         const solid = buildDrawer(m, spec, {
@@ -305,16 +323,78 @@ function buildDoor(m: ManifoldToplevel, spec: CubeSpec, Lw: number, H: number) {
     ? [[A - 9, DECK / 2], [A - 9, B - DECK / 2]]
     : [[A - DECK / 2, B * 0.25], [A - DECK / 2, B * 0.75]];
   const pockets: Manifold[] = [];
-  for (const [x, z] of spots) {
-    if (spec.latch === "magnet") {
+  const parts: { kind: string; solid: Manifold; open: Manifold; flat: Vec3 }[] = [];
+
+  if (spec.latch === "magnet") {
+    for (const [x, z] of spots) {
       const cup = M.cylinder(MAGNET.depth + 0.01, MAGNET.r, MAGNET.r, 32).rotate([-90, 0, 0]);
       pockets.push(cup.translate([x, -0.01, z]));
       door = door.subtract(cup.translate([x, -MAGNET.depth, z]));
-    } else {
+    }
+  } else if (spec.latch === "bump") {
+    for (const [x, z] of spots) {
       door = door.add(M.sphere(1.0, 24).translate([x, 0, z]).intersect(M.cube([4, 2, 4]).translate([x - 2, -0.5, z - 2])));
       pockets.push(M.sphere(1.3, 24).translate([x, 0, z]));
     }
+  } else if (spec.latch === "hook") {
+    const hx = vertical ? A - 13 : spots[0][0];
+    const hz = spots[0][1];
+    const z0 = vertical ? 0.8 : hz - 2.5;
+    const z1 = vertical ? DECK - 0.8 : hz + 2.5;
+    door = door.subtract(M.cube([10, 2.5, z1 - z0 + 0.4]).translate([hx - 5, -2.5, z0 - 0.2]));
+
+    const pts: Vec3[] = [
+      [hx - 3, 0, z0], [hx - 0.4, -1.2, z0], [hx - 0.4, 0, z0],
+      [hx - 3, 0, z1], [hx - 0.4, -1.2, z1], [hx - 0.4, 0, z1],
+    ];
+    const catchRamp = M.hull(pts);
+    const catchBase = M.cube([3.5, 1.2, z1 - z0]).translate([hx - 3.5, -0.01, z0]);
+    fixed.push(catchRamp.add(catchBase));
+
+    const arm = M.cube([5.0, 0.9, 1.6]).translate([hx - 4.8, -2.1, hz - 0.8]);
+    const barb = M.cube([1.4, 1.3, 1.6]).translate([hx + 0.2, -2.1, hz - 0.8]);
+    door = door.add(arm).add(barb);
+  } else if (spec.latch === "knob") {
+    const kx = vertical ? A - 14 : A - DECK - 12;
+    const kz = vertical ? DECK + 12 : B * 0.25;
+    const holeR = 2.7;
+    const pegR = 2.3;
+    door = door.subtract(M.cylinder(2 * R + 2, holeR, holeR, 32).rotate([-90, 0, 0]).translate([kx, -2 * R - 1, kz]));
+
+    // Catch tab placed to the side of the peg
+    const catchH = vertical ? kz + 4 - DECK : 14;
+    const catchZ0 = vertical ? DECK : kz - 7;
+    const catchTab = M.cube([5, 1.4, catchH]).translate([kx + 3.0, 0.6, catchZ0]);
+    fixed.push(catchTab);
+
+    // Knob part: handle, peg, cam lobe
+    const handleDisc = M.cylinder(2.6, 5.5, 5.5, 32).rotate([-90, 0, 0]).translate([kx, -9.0, kz]);
+    const handleBar = M.cube([10, 1.2, 2.5]).translate([kx - 5, -10.2, kz - 1.25]);
+    const handle = handleDisc.add(handleBar);
+    const peg = M.cylinder(8.8, pegR, pegR, 24).rotate([-90, 0, 0]).translate([kx, -6.4, kz]);
+    // Cam lobe extends in +X behind the catch tab
+    const lobeBox = M.cube([6.5, 1.4, 6]).translate([kx, 2.4, kz - 3]);
+    const chamfer = M.hull([
+      M.cube([pegR * 2, 1.4, 0.01]).translate([kx - pegR, 2.4, kz]),
+      lobeBox,
+    ]);
+    const knobSolid = handle.add(peg).add(lobeBox).add(chamfer);
+    const knobOpen = knobSolid.translate([-R, R, 0]).rotate([0, 0, -100]).translate([R, -R, 0]);
+    parts.push({ kind: "knob", solid: knobSolid, open: knobOpen, flat: [90, 0, 0] });
   }
+
+  if (spec.lockMagnet) {
+    const mx = vertical ? A - 13 : A - DECK - 12;
+    const mz = vertical ? B - DECK - 4 : B * 0.75;
+    const tabZ0 = mz - 4;
+    const magTab = M.cube([8, LOCK_MAGNET.depth + 1.2, 8]).translate([mx - 4, 0, tabZ0]);
+    const magCupDeck = M.cylinder(LOCK_MAGNET.depth + 0.01, LOCK_MAGNET.r, LOCK_MAGNET.r, 32).rotate([-90, 0, 0]).translate([mx, -0.01, mz]);
+    fixed.push(magTab.subtract(magCupDeck));
+
+    const magCupDoor = M.cylinder(LOCK_MAGNET.depth + 0.01, LOCK_MAGNET.r, LOCK_MAGNET.r, 32).rotate([-90, 0, 0]).translate([mx, -LOCK_MAGNET.depth, mz]);
+    door = door.subtract(magCupDoor);
+  }
+
   const opened = door.translate([-R, R, 0]).rotate([0, 0, -100]).translate([R, -R, 0]);
 
   const toFace = (s: Manifold) => {
@@ -325,7 +405,13 @@ function buildDoor(m: ManifoldToplevel, spec: CubeSpec, Lw: number, H: number) {
       case "top": return s.mirror([Math.SQRT1_2, 0, -Math.SQRT1_2]).mirror([0, 0, 1]).translate([0, 0, H]);
     }
   };
-  return { door: toFace(door), opened: toFace(opened), fixed: fixed.map(toFace), pockets: pockets.map(toFace) };
+  return {
+    door: toFace(door),
+    opened: toFace(opened),
+    fixed: fixed.map(toFace),
+    pockets: pockets.map(toFace),
+    parts: parts.map((pt) => ({ ...pt, solid: toFace(pt.solid), open: toFace(pt.open) })),
+  };
 }
 
 /** Sliding panels riding in grooves cut into the top and bottom decks just inside the opening. */
@@ -338,6 +424,9 @@ function buildSlide(m: ManifoldToplevel, spec: CubeSpec, Lw: number, H: number) 
   const span = Lw - 2 * spec.wall;
   const grooves: Manifold[] = [];
   const panels: { solid: Manifold; open: Manifold }[] = [];
+  const fixed: Manifold[] = [];
+  const pockets: Manifold[] = [];
+  const parts: { kind: string; solid: Manifold; open: Manifold; flat: Vec3 }[] = [];
   const pw = (spec.panels === 2 ? span / 2 + 6 : span / 2 + 6) - c;
   const ph = H - 2 * DECK + gTop - 0.5;
   for (let i = 0; i < spec.panels; i++) {
@@ -358,10 +447,57 @@ function buildSlide(m: ManifoldToplevel, spec: CubeSpec, Lw: number, H: number) 
     const pull = M.hull([cup.translate([fx, y0 + c - 0.01, zc - slotH / 2 + 6]), cup.translate([fx, y0 + c - 0.01, zc + slotH / 2 - 6])]);
     p = p.subtract(pull);
     const shift = span - pw - c;
+
+    // Door lock on sliding panels applies to the front/primary panel (panel 0)
+    if (i === 0) {
+      const lockX = spec.wall + 8;
+      if (spec.latch === "hook") {
+        const catchTab = M.cube([3, 0.6, 6]).translate([lockX - 2.5, y0 + c + t + 0.4, DECK - gBot]);
+        fixed.push(catchTab);
+
+        const arm = M.cube([5.5, 0.3, 1.6]).translate([lockX - 4.5, y0 + c + t - 0.2, DECK + 2]);
+        const barb = M.cube([1.6, 0.7, 1.6]).translate([lockX + 1.2, y0 + c + t + 0.4, DECK + 2]);
+        p = p.add(arm).add(barb);
+      } else if (spec.latch === "knob") {
+        const kz = DECK + 12;
+        const holeR = 2.6;
+        const pegR = 2.2;
+        p = p.subtract(M.cylinder(t + 2, holeR, holeR, 32).rotate([-90, 0, 0]).translate([lockX, y0 + c - 1, kz]));
+
+        // Catch tab placed to the side of the peg (lockX + 3.0 to lockX + 8.0)
+        const catchTab = M.cube([5, 0.6, kz + 4 - DECK]).translate([lockX + 3.0, y0 + c + t + 0.3, DECK]);
+        fixed.push(catchTab);
+
+        const handleDisc = M.cylinder(2.6, 5.5, 5.5, 32).rotate([-90, 0, 0]).translate([lockX, y0 + c - 3.0, kz]);
+        const handleBar = M.cube([10, 1.2, 2.5]).translate([lockX - 5, y0 + c - 4.2, kz - 1.25]);
+        const handle = handleDisc.add(handleBar);
+        const peg = M.cylinder(t + 1.8, pegR, pegR, 24).rotate([-90, 0, 0]).translate([lockX, y0 + c - 0.4, kz]);
+        // Cam lobe extends in +X behind catchTab within gap before panel 1
+        const lobeBox = M.cube([6.5, 0.6, 6]).translate([lockX, y0 + c + t + 1.1, kz - 3]);
+        const chamfer = M.hull([
+          M.cube([pegR * 2, 0.6, 0.01]).translate([lockX - pegR, y0 + c + t + 1.1, kz]),
+          lobeBox,
+        ]);
+        const knobSolid = handle.add(peg).add(lobeBox).add(chamfer);
+        const knobOpen = knobSolid.translate([shift, 0, 0]);
+        parts.push({ kind: "knob-slide", solid: knobSolid, open: knobOpen, flat: [90, 0, 0] });
+      }
+
+      if (spec.lockMagnet) {
+        const mz = H - DECK - 4;
+        const magTab = M.cube([9, 1.3, 8]).translate([lockX - 4.5, y0 + c + t + 0.2, mz - 4]);
+        const cupDeck = M.cylinder(LOCK_MAGNET.depth + 0.01, LOCK_MAGNET.r, LOCK_MAGNET.r, 32).rotate([-90, 0, 0]).translate([lockX, y0 + c + t + 0.2 - 0.01, mz]);
+        fixed.push(magTab.subtract(cupDeck));
+
+        const cupPanel = M.cylinder(LOCK_MAGNET.depth + 0.01, LOCK_MAGNET.r, LOCK_MAGNET.r, 32).rotate([-90, 0, 0]).translate([lockX, y0 + c + t - LOCK_MAGNET.depth, mz]);
+        p = p.subtract(cupPanel);
+      }
+    }
+
     panels.push({ solid: p, open: p.translate([i === 0 ? shift : -shift, 0, 0]) });
   }
   if (spec.panels === 2) panels[1].open = panels[1].solid; // one side open at a time
-  return { grooves, panels };
+  return { grooves, panels, fixed, pockets, parts };
 }
 
 /** Drawer box with rear runners, a front plate covering the opening, a pull and a label slot. */
